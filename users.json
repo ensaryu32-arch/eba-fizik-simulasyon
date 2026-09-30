@@ -1,0 +1,140 @@
+{
+  "ensar": {
+    "username": "ensar",
+    "cleanName": "ensar",
+    "passwordHash": "de98c24f0809cb0b30ac69ebb2c870fe32e2aa3d52d5fe25bcee87161531e742",
+    "createdAt": "2026-09-30T13:30:00.000Z",
+    "isAdmin": true,
+    "role": "admin",
+    "coins": 1001499,
+    "gems": 101024,
+    "level": 100,
+    "xp": 99999,
+    "kills": 150,
+    "deaths": 5,
+    "score": 15000,
+    "equipped": {
+      "gun1": "AK-47 | Dragon Fire",
+      "gun2": "Deagle",
+      "gun3": "Huntsman Knife | Damascus Steel",
+      "gun4": "Frag Grenade",
+      "skin": "Ghost Operator",
+      "hat": "Yarn Beanie",
+      "back": "None",
+      "face": "Iconic Smug Man Face"
+    },
+    "inventory": [
+      "AK-47",
+      "Pistol",
+      "Combat Knife",
+      "Frag Grenade",
+      "Mr Veck",
+      "Laughing Emoji Head",
+      "Karambit",
+      "Butterfly Knife",
+      "Huntsman Knife",
+      "Minigun",
+      "Rocket Launcher",
+      "Sniper",
+      "Burst Rifle",
+      "Deagle",
+      "Karambit | Gold",
+      "Karambit | Fade Emerald",
+      "Butterfly Knife | Cyber Neon",
+      "Huntsman Knife | Damascus Steel",
+      "AK-47 | Dragon Fire",
+      "Minigun | Vulcan Magma",
+      "Ghost Operator",
+      "Cyber Ninja"
+    ],
+    "claimedTasks": [
+      "task_kills_5",
+      "task_damage_1000",
+      "task_headshot_3"
+    ],
+    "usedCoupons": [],
+    "friends": [
+      "ensarbeee",
+      "ensarbey"
+    ],
+    "incomingFriendRequests": [],
+    "sentFriendRequests": []
+  },
+  "ensarbey": {
+    "username": "ensarbey",
+    "cleanName": "ensarbey",
+    "passwordHash": "de98c24f0809cb0b30ac69ebb2c870fe32e2aa3d52d5fe25bcee87161531e742",
+    "createdAt": "2026-09-30T14:12:02.072Z",
+    "coins": 0,
+    "gems": 0,
+    "level": 0,
+    "xp": 0,
+    "kills": 0,
+    "deaths": 0,
+    "score": 0,
+    "equipped": {
+      "gun1": "AK-47",
+      "gun2": "Pistol",
+      "gun3": "Combat Knife",
+      "gun4": "Frag Grenade",
+      "skin": "Mr Veck",
+      "hat": "Laughing Emoji Head",
+      "back": "None",
+      "face": "Iconic Smug Man Face"
+    },
+    "inventory": [
+      "AK-47",
+      "Pistol",
+      "Combat Knife",
+      "Frag Grenade",
+      "Mr Veck",
+      "Laughing Emoji Head"
+    ],
+    "claimedTasks": [],
+    "usedCoupons": [],
+    "isBanned": false,
+    "friends": [
+      "ensar"
+    ],
+    "incomingFriendRequests": [],
+    "sentFriendRequests": []
+  },
+  "ensarbeee": {
+    "username": "ensarbeee",
+    "cleanName": "ensarbeee",
+    "passwordHash": "de98c24f0809cb0b30ac69ebb2c870fe32e2aa3d52d5fe25bcee87161531e742",
+    "createdAt": "2026-09-30T17:27:13.134Z",
+    "coins": 0,
+    "gems": 0,
+    "level": 0,
+    "xp": 0,
+    "kills": 0,
+    "deaths": 0,
+    "score": 0,
+    "equipped": {
+      "gun1": "AK-47",
+      "gun2": "Pistol",
+      "gun3": "Combat Knife",
+      "gun4": "Frag Grenade",
+      "skin": "Mr Veck",
+      "hat": "Laughing Emoji Head",
+      "back": "None",
+      "face": "Iconic Smug Man Face"
+    },
+    "inventory": [
+      "AK-47",
+      "Pistol",
+      "Combat Knife",
+      "Frag Grenade",
+      "Mr Veck",
+      "Laughing Emoji Head"
+    ],
+    "claimedTasks": [],
+    "usedCoupons": [],
+    "friends": [
+      "ensar"
+    ],
+    "incomingFriendRequests": [],
+    "sentFriendRequests": []
+  }
+}

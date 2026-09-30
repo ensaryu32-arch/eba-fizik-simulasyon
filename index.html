@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EBA Proje Geliştirme ve Fizik Modelleme Portalı</title>
+  <meta name="description" content="T.C. Milli Eğitim Bakanlığı Öğrenci Bilişim, 3D Fizik Modelleme ve Bilgisayar Bilimleri Çalışma Portalı">
+  <meta name="keywords" content="eba, meb, egitim, fizik modelleme, 3d simülasyon, ödev, matematik, ders notları, bilgisayar bilimi">
+  <meta name="author" content="MEB Bilişim">
+  <meta name="category" content="Education">
+  <meta name="rating" content="General">
+  <link rel="icon" id="site-favicon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎓</text></svg>">
+  <link rel="stylesheet" href="style.css?v=20260930_4">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+  <!-- 3D WebGL Canvas Layer -->
+  <div id="canvas-container"></div>
+
+  <!-- MAIN MENU LOBBY OVERLAY (SCREENSHOT 3) -->
+  <div id="ui-root">
+    
+    <!-- TOP BAR -->
+    <header class="top-bar">
+      <div class="interactive">
+        <button class="btn-login" id="btn-header-login" onclick="openAuthModal()">
+          <span id="btn-login-icon">👤</span> <span id="btn-login-text">Login</span>
+        </button>
+      </div>
+
+      <div class="interactive" style="display: flex; gap: 16px;">
+        <div class="currency-badge" onclick="openCurrencyModal('coins')" style="cursor: pointer;" title="Altın Satın Al / Kupon Kodu">
+          <div class="currency-icon coin-icon">🪙</div>
+          <span id="coin-amount">1,079</span>
+          <button class="btn-add-currency" onclick="event.stopPropagation(); openCurrencyModal('coins');">+</button>
+        </div>
+        <div class="currency-badge" onclick="openCurrencyModal('gems')" style="cursor: pointer;" title="Elmas Satın Al">
+          <div class="currency-icon gem-icon">💎</div>
+          <span id="gem-amount">45</span>
+          <button class="btn-add-currency" onclick="event.stopPropagation(); openCurrencyModal('gems');">+</button>
+        </div>
+      </div>
+
+      <div class="interactive" style="display: flex; gap: 10px;">
+        <button class="btn-icon" id="btn-sound" onclick="toggleSound()" title="Sesi Aç / Kapat">🔊</button>
+        <button class="btn-icon" id="btn-fullscreen" onclick="toggleFullscreen()" title="Tam Ekran Yap / Çık">⛶</button>
+        <button class="btn-icon" id="btn-school-disguise" onclick="toggleSchoolDisguise()" title="🎓 Okul Kamuflaj / Panik Modu (Kısayol: F9)">🎓</button>
+        <button class="btn-invite" onclick="openFriendsModal()" style="background: linear-gradient(180deg, #0284c7 0%, #0369a1 100%); border-color: #38bdf8;">
+          <span>👥</span> ARKADAŞLAR
+        </button>
+        <button class="btn-invite" onclick="openTasksModal()">
+          <span>📋</span> GÖREVLER
+        </button>
+        <button class="btn-invite" id="btn-admin-panel" onclick="openAdminModal()" style="display: none; background: linear-gradient(180deg, #ef4444 0%, #b91c1c 100%); border-color: #f87171; box-shadow: 0 0 15px rgba(239, 68, 68, 0.5); font-weight: 900;">
+          <span>⚡</span> ADMIN PANEL
+        </button>
+      </div>
+    </header>
+
+    <!-- LOBBY CONTENT -->
+    <main class="lobby-content" id="lobby-view">
+      
+      <!-- LEFT SIDE MATCHES -->
+      <div class="match-board-container interactive">
+        <div class="side-banner" onclick="startBattle()">
+          <div class="banner-header">🔥 CORROPROMAX</div>
+          <div class="banner-body">
+            <div class="banner-title">BLOCK ARENA</div>
+            <div class="banner-desc">Hızlı 8v8 Dinamik Simülasyon Alanı</div>
+          </div>
+        </div>
+
+        <div class="live-matches-card">
+          <div class="live-card-header">
+            <div class="live-indicator">
+              <div class="live-dot"></div>
+              <span>LIVE NOW</span>
+            </div>
+            <span style="font-size: 11px; color: #8fa0c9;">Corridor Arena</span>
+          </div>
+          <div class="match-list">
+            <div class="match-item">
+              <div>Block Arena (TDM)</div>
+              <button class="btn-join" onclick="startBattle()">JOIN</button>
+            </div>
+            <div class="match-item">
+              <div>Vertigo (FFA)</div>
+              <button class="btn-join" onclick="startBattle()">JOIN</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CENTER PLAY BUTTON -->
+      <div class="center-play-area interactive">
+        <div class="player-tag-box">
+          <span id="lobby-level-badge" style="background: #ffa751; color: #2b1400; font-weight: 900; font-size: 11px; padding: 2px 6px; border-radius: 4px;">⭐ 5</span>
+          <input type="text" id="player-name-input" class="player-nickname-input" value="ensar44" maxlength="15">
+        </div>
+
+        <button class="btn-play-main" id="btn-play" onclick="openModeModal()">
+          CORROPROMAX
+        </button>
+      </div>
+
+      <!-- RIGHT SIDE MATCHES -->
+      <div class="match-board-container interactive">
+        <div class="live-matches-card">
+          <div class="live-card-header">
+            <div class="live-indicator">
+              <div class="live-dot"></div>
+              <span>LIVE NOW</span>
+            </div>
+            <span style="font-size: 11px; color: #8fa0c9;">Arcade FFA</span>
+          </div>
+          <div class="match-list">
+            <div class="match-item">
+              <div>Corro Modu</div>
+              <button class="btn-join" onclick="startBattle('Gun Game')">JOIN</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="side-banner" style="background: linear-gradient(145deg, #2c1a4d, #140d24);" onclick="openBackpackModal()">
+          <div class="banner-header" style="background: linear-gradient(90deg, #00f0ff, #7928ca);">⭐ SEASON PASS & LOOT</div>
+          <div class="banner-body">
+            <div class="banner-title" style="color: #00f0ff;">NEON CYBER</div>
+            <div class="banner-desc">Unlock Pink Honeycomb AK-47 & Karambit!</div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- BOTTOM BAR -->
+    <footer class="bottom-bar">
+      <div class="interactive" style="font-size: 12px; font-weight: 700; color: #8fa0c9;">
+        <div>18/20 In Lobby, 650 Online</div>
+        <div style="background: rgba(18,22,38,0.9); padding: 4px 10px; border-radius: 6px; margin-top: 4px; display: inline-block; color: #fff;">
+          🇩🇪 Europe #2
+        </div>
+      </div>
+
+      <div class="bottom-nav-dock interactive">
+        <div class="dock-item" onclick="openGunsShopModal()" title="Guns & Skins">
+          <div style="font-size: 20px;">🔫</div>
+          <span>Guns</span>
+        </div>
+        <div class="dock-item" onclick="openLootboxModal()" title="Kasa Açma">
+          <div style="font-size: 20px;">📦</div>
+          <span>Lootbox</span>
+        </div>
+        <div class="dock-item" onclick="openBackpackModal()" title="Backpack / Loot">
+          <div style="font-size: 20px;">🎒</div>
+          <span>Loot</span>
+        </div>
+        <div class="dock-item" onclick="openTasksModal()" title="Görevler">
+          <div style="font-size: 20px;">📋</div>
+          <span>Tasks</span>
+        </div>
+      </div>
+
+      <div class="interactive">
+        <button class="btn-login" style="font-size: 13px; padding: 8px 16px;" onclick="openPrivateGameModal()">
+          ⚔️ Özel Oda (Corro)
+        </button>
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- 1:1 GAME MODE SELECTION MODAL (SCREENSHOT 2) -->
+  <div id="mode-select-modal" class="mode-modal-overlay">
+    <div class="mode-modal-card">
+      <button class="btn-close-modal" onclick="closeModeModal()">✕</button>
+      
+      <div class="mode-grid-top">
+        <div class="mode-tile-btn" onclick="startBattle('FFA')">
+          <div class="mode-badge-tag tag-hot">🔥 HOT</div>
+          <div style="font-size: 36px;">🏆</div>
+          <div class="mode-tile-title">Free For All</div>
+        </div>
+        <div class="mode-tile-btn" onclick="startBattle('Gun Game')">
+          <div class="mode-badge-tag tag-new">NEW!</div>
+          <div style="font-size: 36px;">🔫</div>
+          <div class="mode-tile-title">Corro Modu</div>
+        </div>
+        <div class="mode-tile-btn" onclick="openPrivateGameModal()">
+          <div style="font-size: 36px;">👥</div>
+          <div class="mode-tile-title">Arkadaşlarla Giriş</div>
+        </div>
+      </div>
+
+      <div class="arena-modes-row">
+        <div class="arena-sub-btn" onclick="startBattle('1v1')">1v1</div>
+        <div class="arena-sub-btn" onclick="startBattle('2v2')">2v2</div>
+        <div class="arena-sub-btn" onclick="startBattle('3v3')">3v3</div>
+        <div class="arena-sub-btn" onclick="startBattle('4v4')">4v4</div>
+      </div>
+
+      <div style="background: rgba(0,0,0,0.4); padding: 12px 18px; border-radius: 12px; font-weight: 800; font-size: 13px; color: #8fa0c9;">
+        🛡️ Ranked • All Modes Available
+      </div>
+    </div>
+  </div>
+
+  <!-- 1:1 PLAY WITH FRIENDS / PRIVATE ROOM MODAL (SCREENSHOT 3) -->
+  <div id="private-game-modal" class="mode-modal-overlay">
+    <div class="private-modal-card">
+      <button class="btn-close-modal" onclick="closePrivateGameModal()">✕</button>
+
+      <!-- Left Join Card -->
+      <div class="private-column-card join-party-card">
+        <div class="private-card-header" style="color: #facc15;">
+          <span>👥</span> ODAYA GİR / KATIL
+        </div>
+        <div style="font-size: 12px; color: #94a3b8;">Arkadaşlarının kurduğu özel odaya katılın:</div>
+        <input type="text" id="private-room-code-input" class="private-input-box" placeholder="Oda ID (Örn: CC7F7LX8)" maxlength="12">
+        <button class="btn-join-private-game" onclick="joinPrivateRoom()">GİRİŞ YAP</button>
+      </div>
+
+      <!-- Right Create Card -->
+      <div class="private-column-card create-party-card">
+        <div class="private-card-header" style="color: #c084fc;">
+          <span>☁️</span> ÖZEL ODA OLUŞTUR
+        </div>
+        <div style="font-size: 12px; color: #94a3b8;">Özel simülasyon odası oluştur (Sadece Oyuncular):</div>
+        
+        <div class="private-select-row">
+          <select id="private-mode-select" class="private-select-item">
+            <option value="FFA">Mod: FFA</option>
+            <option value="TDM">Mod: TDM</option>
+            <option value="Gun Game">Mod: Corro Modu</option>
+          </select>
+          <select class="private-select-item">
+            <option>🇹🇷 TR Server #1</option>
+          </select>
+        </div>
+
+        <div class="private-select-row">
+          <select class="private-select-item">
+            <option>10 Kişilik</option>
+            <option>6 Kişilik</option>
+            <option>16 Kişilik</option>
+          </select>
+          <select class="private-select-item">
+            <option>30:00 Dk</option>
+            <option>15:00 Dk</option>
+          </select>
+        </div>
+
+        <button class="btn-create-private-game" onclick="createPrivateRoom()">ODA BAŞLAT</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Damage Blood Screen Flash Vignette -->
+  <div id="damage-vignette"></div>
+
+  <!-- 1:1 IN-GAME HUD (SCREENSHOT 1 & 2) -->
+  <div id="battle-hud">
+    
+    <!-- Top Left VECK.IO Logo & Room Tag -->
+    <div class="hud-top-left">
+      <div class="veck-logo-title">VECK.IO</div>
+      <div class="room-tag-pill">Your Room: <span id="room-code-tag">ME7QQGX8</span></div>
+    </div>
+    <div class="veck-chat-prompt">💬 [Enter] Veck Chat</div>
+
+    <!-- Top Center Timer & Scoreboard -->
+    <div class="hud-top-center">
+      <div class="match-timer-pill" id="match-timer">13:22</div>
+      <div class="score-badge-card">
+        <div style="color: #ffd700;">#1</div>
+        <div class="score-number" id="player-score">0</div>
+        <div style="font-size: 9px;">You</div>
+      </div>
+    </div>
+
+    <!-- 1:1 Segmented Crosshair (Screenshot 1) -->
+    <div class="veck-crosshair" id="main-crosshair">
+      <div class="ch-dot"></div>
+      <div class="ch-line ch-top"></div>
+      <div class="ch-line ch-bottom"></div>
+      <div class="ch-line ch-left"></div>
+      <div class="ch-line ch-right"></div>
+    </div>
+    <div class="hitmarker" id="hitmarker"></div>
+
+    <!-- Killfeed Top Right -->
+    <div class="killfeed" id="killfeed"></div>
+
+    <!-- Bottom Left Health Bar -->
+    <div class="hud-bottom-left">
+      <div class="health-bar-pill">
+        <div class="health-fill-bar" id="health-fill"></div>
+        <div class="health-number-text" id="health-text">150</div>
+      </div>
+      <div class="controls-hint-text">[SHIFT] to Slide &nbsp;&nbsp; [E] or [Right-Click] to Aim</div>
+    </div>
+
+    <!-- Center Round Status Banners (Screenshots 2 & 4) -->
+    <div class="round-status-banner round-won" id="round-won-banner">ROUND WON</div>
+    <div class="round-status-banner round-lost" id="round-lost-banner">ROUND LOST</div>
+
+    <!-- Center Kill Notification Banner (Screenshots 4 & 5) -->
+    <div class="elimination-banner" id="elim-banner">
+      Eliminated <span class="elim-victim-text" id="elim-victim-name">VeckGamer96</span>
+    </div>
+
+    <!-- Killer / #1 Leader Callout Card (Matching Reference Screenshot 1) -->
+    <div class="killer-callout-card" id="killer-card">
+      <div class="killer-avatar-box">
+        <div class="man-face-portrait">
+          <div class="mf-hair-top"></div>
+          <div class="mf-bang mf-bang-l"></div>
+          <div class="mf-bang mf-bang-r"></div>
+          <div class="mf-eyebrow mf-eb-l"></div>
+          <div class="mf-eyebrow mf-eb-r"></div>
+          <div class="mf-eye mf-eye-l"><div class="mf-pupil"></div></div>
+          <div class="mf-eye mf-eye-r"><div class="mf-pupil"></div></div>
+          <div class="mf-mouth"><div class="mf-teeth"></div></div>
+          <div class="mf-body-purple"></div>
+          <div class="mf-gun-shoulder">🔫</div>
+        </div>
+      </div>
+      <div class="killer-details">
+        <div class="killer-top-badge">👑 #1 MATCH LEADER</div>
+        <div class="killer-name-title" id="killer-name">Vortex_TR ✨</div>
+        <div class="killer-sub-text" id="killer-weapon">Eliminated you with AK-47</div>
+      </div>
+    </div>
+
+    <!-- Dynamic 3D Floating Damage Numbers Layer -->
+    <div id="damage-numbers-layer"></div>
+
+    <!-- Bottom Right Ammo & 4 Weapon Slots (Screenshot 1 & 2) -->
+    <div class="hud-bottom-right">
+      <div class="ammo-display-group">
+        <div class="ammo-large-number" id="ammo-current">30 <span style="font-size: 26px; color: #8fa0c9;">III</span></div>
+        <div class="ammo-gun-label" id="ammo-gun-name">AK-47</div>
+      </div>
+      <div class="weapon-slot-row">
+        <div class="weapon-slot-box active" id="slot-1" onclick="switchSlot(1)" title="Key 1: AK-47">
+          🔫
+        </div>
+        <div class="weapon-slot-box" id="slot-2" onclick="switchSlot(2)" title="Key 2: Pistol">
+          🔥
+        </div>
+        <div class="weapon-slot-box" id="slot-3" onclick="switchSlot(3)" title="Key 3: Knife">
+          🗡️
+        </div>
+        <div class="weapon-slot-box" id="slot-4" onclick="switchSlot(4)" title="Key 4: Grenade">
+          💣
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 1:1 PAUSED MODAL OVERLAY (MATCHING SCREENSHOT 2) -->
+  <div id="pause-overlay">
+    
+    <div class="pause-header-top">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div class="veck-logo-title" style="font-size: 34px;">VECK.IO</div>
+        <div class="room-tag-pill">Your Room: <span id="pause-room-id">M73MNGX8</span></div>
+      </div>
+      <div class="match-timer-pill" id="pause-match-timer" style="font-size: 20px; padding: 4px 16px;">01:28</div>
+      <div style="display: flex; gap: 10px;">
+        <button class="btn-icon">⬇</button>
+        <button class="btn-icon">⚙</button>
+        <button class="btn-icon">👥</button>
+        <button class="btn-icon">⛶</button>
+      </div>
+    </div>
+
+    <div class="pause-main-container">
+      
+      <!-- Left Player Card (Screenshot 2) -->
+      <div class="pause-player-card">
+        <div class="pause-avatar-circle">
+          <div class="man-face-portrait" style="border-radius: 50%;">
+            <div class="mf-hair-top"></div>
+            <div class="mf-bang mf-bang-l"></div>
+            <div class="mf-bang mf-bang-r"></div>
+            <div class="mf-eyebrow mf-eb-l"></div>
+            <div class="mf-eyebrow mf-eb-r"></div>
+            <div class="mf-eye mf-eye-l"><div class="mf-pupil"></div></div>
+            <div class="mf-eye mf-eye-r"><div class="mf-pupil"></div></div>
+            <div class="mf-mouth"><div class="mf-teeth"></div></div>
+            <div class="mf-body-purple"></div>
+          </div>
+        </div>
+        <div class="pause-chat-input-fake">Press "/" to enter chat ➔</div>
+        <div class="pause-player-name" id="pause-card-name">ensar</div>
+        <div class="pause-player-lvl" id="pause-card-lvl">lvl 0</div>
+        <div class="xp-progress-bar">
+          <div class="xp-progress-fill" id="pause-card-xp-fill" style="width: 0%;"></div>
+        </div>
+        <div id="pause-card-xp-text" style="font-size: 11px; color: #a855f7; font-weight: 800;">1000 XP to Next</div>
+      </div>
+
+      <!-- Center Action Buttons (Clean & Centered) -->
+      <div class="pause-modal-box">
+        <div class="pause-title">PAUSED</div>
+        <button class="btn-pause-action btn-resume" onclick="resumeGame()">
+          ▶ Devam Et
+        </button>
+        <button class="btn-pause-action btn-change-guns" onclick="openChangeGunsModal()">
+          🔫 Change Guns
+        </button>
+        <button class="btn-pause-action btn-invite-pause" onclick="openFriendsModal()">
+          👥 Invite Friends
+        </button>
+        <button class="btn-pause-action btn-leave-match-red" onclick="leaveBattle()">
+          🚪 Leave
+        </button>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- 1:1 WEAPON LOADOUT / CHANGE GUNS MODAL (MATCHING SCREENSHOT 1) -->
+  <div id="change-guns-modal">
+    
+    <div class="cg-top-bar">
+      <div class="veck-logo-title" style="font-size: 38px;">VECK.IO</div>
+      <div class="cg-center-header">
+        <div class="cg-score-pill">
+          <span style="color:#ffd700;">★21</span> 0 YOU
+        </div>
+        <div class="cg-timer-pill" id="cg-match-timer">10:00</div>
+        <div class="cg-score-pill">
+          0 <span style="color:#a855f7;">★1</span>
+        </div>
+      </div>
+      <button class="btn-close-modal" onclick="closeChangeGunsModal()">✕</button>
+    </div>
+
+    <div class="cg-map-label" style="cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; margin: 0 auto 12px auto; background: rgba(15, 23, 42, 0.85); padding: 6px 20px; border-radius: 20px; border: 1px solid rgba(0, 240, 255, 0.4); box-shadow: 0 0 15px rgba(0, 240, 255, 0.2);" onclick="toggleSelectedMap()">
+      <span>🗺️ HARİTA:</span>
+      <span id="current-map-name" style="color: #00f0ff; font-weight: 900;">Cyber City</span>
+      <span style="font-size: 11px; color: #ffd700;">(Değiştir 🔄)</span>
+    </div>
+
+    <!-- 4 Slot Selector Boxes (Screenshot 1) -->
+    <div class="cg-slot-selector-row">
+      <div class="cg-slot-tab active" id="cg-tab-1" onclick="selectGunLoadoutTab(1)">
+        <div class="cg-tab-slot-num">1</div>
+        <div class="cg-tab-name" id="cg-equipped-1">AK-47</div>
+      </div>
+      <div class="cg-slot-tab" id="cg-tab-2" onclick="selectGunLoadoutTab(2)">
+        <div class="cg-tab-slot-num">2</div>
+        <div class="cg-tab-name" id="cg-equipped-2">Pistol</div>
+      </div>
+      <div class="cg-slot-tab" id="cg-tab-3" onclick="selectGunLoadoutTab(3)">
+        <div class="cg-tab-slot-num">3</div>
+        <div class="cg-tab-name" id="cg-equipped-3">Combat Knife</div>
+      </div>
+      <div class="cg-slot-tab" id="cg-tab-4" onclick="selectGunLoadoutTab(4)">
+        <div class="cg-tab-slot-num">4</div>
+        <div class="cg-tab-name" id="cg-equipped-4">Frag Grenade</div>
+      </div>
+    </div>
+
+    <!-- Center Weapon Grid (Screenshot 1) -->
+    <div class="cg-content-row">
+      
+      <!-- Left Bloxity Ad (Screenshot 1) -->
+      <div class="cg-side-ad bloxity-ad">
+        <div class="bloxity-header">🐱 Bloxity</div>
+        <div style="font-size: 42px; margin: 12px 0;">🛹</div>
+        <div class="bloxity-title">CORROPROMAX ONLINE</div>
+      </div>
+
+      <!-- Weapons Grid -->
+      <div class="cg-weapon-grid" id="cg-weapon-grid-container" style="flex: 1; width: 100%;">
+        <!-- Dynamically rendered weapon cards -->
+      </div>
+
+    </div>
+
+    <!-- Pre-Match Weapon Selection Deploy Button -->
+    <div id="cg-deploy-bar" style="margin: 14px auto 8px auto; display: flex; justify-content: center; gap: 16px;">
+      <button id="btn-deploy-action" class="btn-create-private-game" onclick="confirmDeployAndEnterGame()" style="background: linear-gradient(180deg, #10b981 0%, #059669 100%); font-size: 19px; font-weight: 900; padding: 14px 44px; border-radius: 12px; box-shadow: 0 0 25px rgba(16, 185, 129, 0.6); cursor: pointer; border: 2px solid #34d399; letter-spacing: 1px;">
+        ⚔️ SAVAŞA GİR / DEPLOY (SPACE) ➔
+      </button>
+    </div>
+
+  </div>
+
+  <!-- MATCH END VICTORY / 1ST PLACE WINNER MODAL (10 MINUTES EXPIRED) -->
+  <div id="match-end-modal">
+    <div class="match-end-card">
+      <div class="match-end-crown">👑</div>
+      <div class="match-end-title">MATCH COMPLETED (10:00)</div>
+      <div class="match-end-subtitle" id="winner-banner-text">#1 TOP CHAMPION: ensar44</div>
+      
+      <div class="match-end-stats-box">
+        <div class="stat-col">
+          <div class="stat-label">YOUR KILLS</div>
+          <div class="stat-val" id="end-kills" style="color:#4ade80;">14</div>
+        </div>
+        <div class="stat-col">
+          <div class="stat-label">YOUR DEATHS</div>
+          <div class="stat-val" id="end-deaths" style="color:#f87171;">3</div>
+        </div>
+        <div class="stat-col">
+          <div class="stat-label">TOTAL SCORE</div>
+          <div class="stat-val" id="end-score" style="color:#ffd700;">1450</div>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:16px; width:100%; margin-top:10px;">
+        <button class="btn-create-private-game" onclick="startBattle('FFA')">🔄 YENİDEN BAŞLAT</button>
+        <button class="btn-pause-action btn-leave-match-red" onclick="closeMatchEndModal(); leaveBattle();">🚪 MAIN MENU</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 1. AUTHENTICATION (LOGIN / REGISTER) MODAL -->
+  <div id="auth-modal" class="custom-modal-overlay">
+    <div class="custom-modal-card auth-modal-card">
+      <button class="btn-modal-close" onclick="closeAuthModal()">✖</button>
+      <div class="auth-header">
+        <div class="veck-logo-title" style="font-size: 32px;">VECK.IO</div>
+        <div class="auth-subtitle">Online Hesabınıza Giriş Yapın veya Kayıt Olun</div>
+      </div>
+
+      <div class="auth-tab-row">
+        <button class="auth-tab-btn active" id="tab-login-btn" onclick="switchAuthTab('login')">GİRİŞ YAP</button>
+        <button class="auth-tab-btn" id="tab-register-btn" onclick="switchAuthTab('register')">KAYIT OL</button>
+      </div>
+
+      <form id="auth-form" onsubmit="handleAuthSubmit(event)">
+        <div class="auth-input-group">
+          <label>KULLANICI ADI</label>
+          <input type="text" id="auth-username" class="auth-input-field" placeholder="Kullanıcı adınızı girin..." required minlength="3" maxlength="15">
+        </div>
+
+        <div class="auth-input-group">
+          <label>ŞİFRE</label>
+          <input type="password" id="auth-password" class="auth-input-field" placeholder="Şifrenizi girin..." required minlength="4" maxlength="30">
+        </div>
+
+        <div id="auth-error-msg" class="auth-error-box" style="display: none;"></div>
+        <div id="auth-success-msg" class="auth-success-box" style="display: none;"></div>
+
+        <button type="submit" class="btn-auth-submit" id="auth-submit-btn">GİRİŞ YAP</button>
+      </form>
+
+      <div id="auth-logged-in-profile" style="display: none; text-align: center;">
+        <div class="profile-card-badge">
+          <div style="font-size: 36px; margin-bottom: 8px;">👤</div>
+          <div style="font-size: 20px; font-weight: 900; color: #00f0ff;" id="profile-display-name">ensar44</div>
+          <div style="font-size: 13px; color: #ffd700; margin-top: 4px;">🪙 <span id="profile-coins">1,079</span> &nbsp;|&nbsp; 💎 <span id="profile-gems">15</span></div>
+          <div style="font-size: 12px; color: #a855f7; margin-top: 2px;">⭐ Seviye <span id="profile-level">5</span> (XP: <span id="profile-xp">250</span>)</div>
+        </div>
+        <button class="btn-pause-action btn-leave-match-red" style="margin-top: 16px;" onclick="handleLogout()">🚪 ÇIKIŞ YAP</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. GUNS & SKINS SHOP MODAL (SCREENSHOT 1) -->
+  <div id="guns-shop-modal" class="custom-modal-overlay">
+    <div class="guns-modal-container">
+      
+      <!-- Top Bar of Guns & Skins -->
+      <div class="guns-modal-top">
+        <div class="guns-top-currencies">
+          <div class="currency-badge" onclick="openCurrencyModal('coins')" style="cursor: pointer;">
+            <div class="currency-icon coin-icon">🪙</div>
+            <span class="shop-coin-display">1.079</span>
+            <button class="btn-add-currency" onclick="event.stopPropagation(); openCurrencyModal('coins');">+</button>
+          </div>
+          <div class="veck-guns-title">
+            <div style="font-size: 28px; font-weight: 900; letter-spacing: -1px; line-height: 1;">VECK.IO</div>
+            <div style="font-size: 13px; font-weight: 900; color: #cbd5e1; letter-spacing: 1px;">GUNS & SKINS</div>
+          </div>
+          <div class="currency-badge" onclick="openCurrencyModal('gems')" style="cursor: pointer;">
+            <div class="currency-icon gem-icon">💎</div>
+            <span class="shop-gem-display">4</span>
+            <button class="btn-add-currency" onclick="event.stopPropagation(); openCurrencyModal('gems');">+</button>
+          </div>
+        </div>
+        <button class="btn-guns-close-red" onclick="closeGunsShopModal()">✖</button>
+      </div>
+
+      <!-- Main Body: Left Gun Categories, Center 3D Rotating Gun Canvas, Right Ad -->
+      <div class="guns-modal-main">
+        
+        <!-- Left Sidebar Categories -->
+        <div class="guns-sidebar-list" id="guns-category-list">
+          <div class="gun-sidebar-btn active" data-gun="Assault Rifle" onclick="selectShowcaseGun('Assault Rifle')">
+            <div class="gun-sidebar-text">Assault Rifle</div>
+            <div class="gun-sidebar-icon">🔫</div>
+          </div>
+          <div class="gun-sidebar-btn" data-gun="Burst Rifle" onclick="selectShowcaseGun('Burst Rifle')">
+            <div class="gun-sidebar-text">Burst Rifle</div>
+            <div class="gun-sidebar-icon">⚡</div>
+          </div>
+          <div class="gun-sidebar-btn" data-gun="Handgun" onclick="selectShowcaseGun('Handgun')">
+            <div class="gun-sidebar-text">Handgun</div>
+            <div class="gun-sidebar-icon">🔫</div>
+          </div>
+          <div class="gun-sidebar-btn" data-gun="Sniper" onclick="selectShowcaseGun('Sniper')">
+            <div class="gun-sidebar-text">Sniper</div>
+            <div class="gun-sidebar-icon">🎯</div>
+          </div>
+          <div class="gun-sidebar-btn" data-gun="Rocket Launcher" onclick="selectShowcaseGun('Rocket Launcher')">
+            <div class="gun-sidebar-text">Rocket Launcher (RPG)</div>
+            <div class="gun-sidebar-icon">🚀</div>
+          </div>
+          <div class="gun-sidebar-btn" data-gun="Minigun" onclick="selectShowcaseGun('Minigun')">
+            <div class="gun-sidebar-text">Minigun</div>
+            <div class="gun-sidebar-icon">🌪️</div>
+          </div>
+          <div class="gun-sidebar-btn" data-gun="Combat Knife" onclick="selectShowcaseGun('Combat Knife')">
+            <div class="gun-sidebar-text">M9 Kasatura</div>
+            <div class="gun-sidebar-icon">🗡️</div>
+          </div>
+          <div class="gun-sidebar-btn" data-gun="Karambit" onclick="selectShowcaseGun('Karambit')">
+            <div class="gun-sidebar-text">Karambit</div>
+            <div class="gun-sidebar-icon">🌀</div>
+          </div>
+          <div class="gun-sidebar-btn" data-gun="Butterfly Knife" onclick="selectShowcaseGun('Butterfly Knife')">
+            <div class="gun-sidebar-text">Kelebek Bıçak</div>
+            <div class="gun-sidebar-icon">🦋</div>
+          </div>
+          <div class="gun-sidebar-btn" data-gun="Huntsman Knife" onclick="selectShowcaseGun('Huntsman Knife')">
+            <div class="gun-sidebar-text">Avcı Bıçağı</div>
+            <div class="gun-sidebar-icon">🪓</div>
+          </div>
+          <div class="gun-sidebar-btn" data-gun="Shawty" onclick="selectShowcaseGun('Shawty')">
+            <div class="gun-sidebar-text">Shawty</div>
+            <div class="gun-sidebar-icon">💥</div>
+          </div>
+          <div class="gun-sidebar-btn" data-gun="Bow" onclick="selectShowcaseGun('Bow')">
+            <div class="gun-sidebar-text">Bow</div>
+            <div class="gun-sidebar-icon">🏹</div>
+          </div>
+          <div class="gun-sidebar-btn" data-gun="AK-47" onclick="selectShowcaseGun('AK-47')">
+            <div class="gun-sidebar-text">AK-47</div>
+            <div class="gun-sidebar-icon">🔥</div>
+          </div>
+        </div>
+
+        <!-- Center 3D Gun Rotating Showcase -->
+        <div class="guns-center-showcase">
+          <canvas id="gun-preview-canvas" width="600" height="420"></canvas>
+          <div class="guns-showcase-overlay">
+            <div class="showcase-gun-title" id="showcase-title">Assault Rifle</div>
+            <div class="showcase-gun-action-box" id="showcase-action-container">
+              <!-- Equipped / Equip / Buy Button -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Side Weapon Details Box -->
+        <div class="guns-side-stats" style="width: 220px; background: rgba(15, 23, 42, 0.95); border: 2px solid #273553; border-radius: 18px; padding: 20px 16px; display: flex; flex-direction: column; gap: 14px;">
+          <div style="font-size: 14px; font-weight: 900; color: #38bdf8; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;">📊 Silah Özellikleri</div>
+          <div style="display: flex; justify-content: space-between; font-size: 13px;"><span style="color: #94a3b8;">Hasar:</span><b style="color: #ef4444;">YÜKSEK</b></div>
+          <div style="display: flex; justify-content: space-between; font-size: 13px;"><span style="color: #94a3b8;">Atış Hızı:</span><b style="color: #facc15;">OTOMATİK</b></div>
+          <div style="display: flex; justify-content: space-between; font-size: 13px;"><span style="color: #94a3b8;">Menzil:</span><b style="color: #4ade80;">ORTA / UZAK</b></div>
+          <div style="display: flex; justify-content: space-between; font-size: 13px;"><span style="color: #94a3b8;">Headshot:</span><b style="color: #a855f7;">%150 CRIT</b></div>
+          <div style="margin-top: auto; font-size: 11px; color: #64748b; text-align: center;">VECK.IO ARMORY</div>
+        </div>
+
+      </div>
+
+      <!-- Bottom Nav Dock (Screenshot 1) -->
+      <div class="guns-bottom-dock">
+        <div class="guns-dock-item" onclick="openTasksModal()">
+          <div style="font-size: 20px;">📋</div>
+          <span>Tasks</span>
+        </div>
+        <div class="guns-dock-item active" onclick="openBackpackModal()">
+          <div style="font-size: 20px;">🔫</div>
+          <span>Skins</span>
+        </div>
+        <div class="guns-dock-item" onclick="openBackpackModal('wraps')">
+          <div style="font-size: 20px;">🚩</div>
+          <span>Wraps</span>
+        </div>
+        <div class="guns-dock-item" onclick="alert('Trade sistemi yakında aktif olacak!')">
+          <div style="font-size: 20px;">🔄</div>
+          <span>Trade</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 3. BACKPACK & LOOT / SKINS SHOP MODAL (SCREENSHOTS 2 & 3) -->
+  <div id="backpack-modal" class="custom-modal-overlay">
+    <div class="backpack-modal-container">
+      
+      <!-- Top Title Bar -->
+      <div class="backpack-modal-top">
+        <div style="display: flex; flex-direction: column;">
+          <div class="backpack-header-title">Backpack</div>
+          <div class="backpack-header-subtitle"><span id="backpack-collected-count">857/857</span> Collected. Total Value: <span style="color:#ffd700;">🪙 <span id="backpack-total-value">14.157.970</span></span></div>
+        </div>
+        <button class="btn-guns-close-red" onclick="closeBackpackModal()">✖</button>
+      </div>
+
+      <!-- Search & Filters Row (Screenshot 2) -->
+      <div class="backpack-filter-bar">
+        <div class="backpack-search-box">
+          <input type="text" id="backpack-search-input" placeholder="Search..." oninput="renderBackpackGrid()">
+          <span style="color: #64748b; font-size: 13px;">🔍</span>
+        </div>
+
+        <div class="backpack-toggle-group">
+          <span style="font-size: 13px; font-weight: 800; color: #cbd5e1;">My Items Only</span>
+          <label class="switch">
+            <input type="checkbox" id="backpack-my-items-toggle" onchange="renderBackpackGrid()">
+            <span class="slider round"></span>
+          </label>
+        </div>
+
+        <div class="backpack-sort-box">
+          <select id="backpack-sort-select" onchange="renderBackpackGrid()" class="backpack-dropdown">
+            <option value="popularity">Popularity</option>
+            <option value="price_asc">Price: Low to High</option>
+            <option value="price_desc">Price: High to Low</option>
+            <option value="rarity">Rarity</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Main Content: Left Avatar 3D Card, Right Skin Grid (Screenshots 2 & 3) -->
+      <div class="backpack-main-layout">
+        
+        <!-- Left 3D Avatar Profile Card -->
+        <div class="backpack-avatar-card">
+          <div class="bp-player-name-tag" id="bp-card-username"><span style="color: #00f0ff;">[edip]</span> ensar44</div>
+          <div class="bp-player-lvl-tag" id="bp-card-lvl">lvl 21</div>
+          
+          <div class="xp-progress-bar" style="width: 88%; margin: 6px auto;">
+            <div class="xp-progress-fill" style="width: 76%;"></div>
+          </div>
+          <div style="font-size: 11px; color: #c084fc; font-weight: 800; margin-bottom: 8px;">919 XP to Next</div>
+
+          <!-- 3D Avatar Render Canvas -->
+          <div class="backpack-avatar-3d-box">
+            <canvas id="avatar-preview-canvas" width="240" height="280"></canvas>
+          </div>
+        </div>
+
+        <!-- Right Item Cards Grid (Screenshot 2 & 3) -->
+        <div class="backpack-item-grid" id="backpack-items-container">
+          <!-- Dynamically populated skin cards -->
+        </div>
+
+      </div>
+
+      <!-- Bottom Dock Navigation (Screenshots 2 & 3) -->
+      <div class="backpack-bottom-dock">
+        <div class="bp-dock-btn active" data-cat="all" onclick="filterBackpackCategory('all')">
+          <div style="font-size: 20px;">🎒</div>
+          <span>Backpack</span>
+        </div>
+        <div class="bp-dock-btn" data-cat="lootbox" onclick="openLootboxModal()">
+          <div style="font-size: 20px;">📦</div>
+          <span>Lootbox</span>
+        </div>
+        <div class="bp-dock-btn" data-cat="guns" onclick="filterBackpackCategory('guns')">
+          <div style="font-size: 20px;">🔫</div>
+          <span>Guns</span>
+        </div>
+        <div class="bp-dock-btn" data-cat="vecks" onclick="filterBackpackCategory('vecks')">
+          <div style="font-size: 20px;">👕</div>
+          <span>Vecks</span>
+        </div>
+        <div class="bp-dock-btn" data-cat="faces" onclick="filterBackpackCategory('faces')">
+          <div style="font-size: 20px;">😀</div>
+          <span>Faces</span>
+        </div>
+        <div class="bp-dock-btn" data-cat="hats" onclick="filterBackpackCategory('hats')">
+          <div style="font-size: 20px;">🤠</div>
+          <span>Hats</span>
+        </div>
+        <div class="bp-dock-btn" data-cat="backs" onclick="filterBackpackCategory('backs')">
+          <div style="font-size: 20px;">🪽</div>
+          <span>Backs</span>
+        </div>
+        <div class="bp-dock-btn" data-cat="gloves" onclick="filterBackpackCategory('gloves')">
+          <div style="font-size: 20px;">🧤</div>
+          <span>Gloves</span>
+        </div>
+        <div class="bp-dock-btn" data-cat="wraps" onclick="filterBackpackCategory('wraps')">
+          <div style="font-size: 20px;">🚩</div>
+          <span>Wraps</span>
+        </div>
+        <div class="bp-dock-btn" data-cat="trade" onclick="alert('Trade sistemi yakında aktif olacak!')">
+          <div style="font-size: 20px;">🔄</div>
+          <span>Trade</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 4. CASE / LOOTBOX OPENING MODAL -->
+  <div id="lootbox-modal" class="custom-modal-overlay">
+    <div class="custom-modal-card lootbox-modal-card">
+      <button class="btn-modal-close" onclick="closeLootboxModal()">✖</button>
+      
+      <div class="lootbox-header">
+        <div style="font-size: 28px; font-weight: 900; color: #ffd700;">📦 KASA AÇMA & LOOTBOX</div>
+        <div style="font-size: 13px; color: #94a3b8;">Efsanevi Karambit, Altın ve Kozmik Gökkuşağı Skinleri Kazanın!</div>
+      </div>
+
+      <div class="lootbox-crate-selection">
+        <div class="crate-card active" onclick="selectCrate('common')">
+          <div class="crate-icon">🪖</div>
+          <div class="crate-name">Askeri Kasa</div>
+          <div class="crate-price">🪙 500</div>
+        </div>
+        <div class="crate-card" onclick="selectCrate('tactical')">
+          <div class="crate-icon">🛡️</div>
+          <div class="crate-name">Taktiksel Kasa</div>
+          <div class="crate-price">🪙 1,500</div>
+        </div>
+        <div class="crate-card" onclick="selectCrate('rainbow')">
+          <div class="crate-icon">🌈</div>
+          <div class="crate-name">Kozmik Gökkuşağı</div>
+          <div class="crate-price">💎 50</div>
+        </div>
+        <div class="crate-card" onclick="selectCrate('legendary')">
+          <div class="crate-icon">🗡️</div>
+          <div class="crate-name">Efsanevi Karambit</div>
+          <div class="crate-price">💎 100</div>
+        </div>
+      </div>
+
+      <!-- Spinning Reel Horizontal Area -->
+      <div class="lootbox-spinner-viewport">
+        <div class="lootbox-center-needle"></div>
+        <div class="lootbox-spinner-track" id="lootbox-track">
+          <!-- Dynamically populated carousel items -->
+        </div>
+      </div>
+
+      <div style="margin-top: 16px; text-align: center;">
+        <button class="btn-open-crate" id="btn-open-crate-action" onclick="spinLootbox()">
+          📦 KASAYI AÇ (<span id="selected-crate-price-text">🪙 500</span>)
+        </button>
+      </div>
+
+      <!-- Loot Won Popup -->
+      <div id="loot-won-popup" class="loot-won-overlay" style="display: none;">
+        <div class="loot-won-card">
+          <div class="loot-won-rays"></div>
+          <div style="font-size: 16px; font-weight: 900; color: #ffd700;" id="loot-won-rarity">TEBRİKLER!</div>
+          <div style="font-size: 64px; margin: 12px 0;" id="loot-won-icon">✨</div>
+          <div style="font-size: 22px; font-weight: 900;" id="loot-won-name">Karambit | Gold</div>
+          <button class="btn-create-private-game" style="margin-top: 16px;" onclick="closeLootWonPopup()">ENVANTERE EKLE</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 5. DAILY TASKS / GÖREVLER MODAL -->
+  <div id="tasks-modal" class="custom-modal-overlay">
+    <div class="custom-modal-card tasks-modal-card">
+      <button class="btn-modal-close" onclick="closeTasksModal()">✖</button>
+      
+      <div class="tasks-header">
+        <div style="font-size: 28px; font-weight: 900; color: #38bdf8;">📋 GÜNLÜK GÖREVLER & ÖDÜLLER</div>
+        <div style="font-size: 13px; color: #94a3b8;">Görevleri tamamlayarak ücretsiz Altın 🪙 ve Elmas 💎 kazanın!</div>
+      </div>
+
+      <div class="tasks-list-container" id="tasks-list-box">
+        <!-- Dynamically generated tasks -->
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. CURRENCY SHOP & PROMO CODE MODAL -->
+  <div id="currency-modal" class="custom-modal-overlay">
+    <div class="custom-modal-card currency-modal-card">
+      <button class="btn-modal-close" onclick="closeCurrencyModal()">✖</button>
+      
+      <div class="currency-modal-header">
+        <div style="font-size: 26px; font-weight: 900; color: #ffd700;">🪙 ALTIN & 💎 ELMAS MAĞAZASI</div>
+        <div style="font-size: 13px; color: #94a3b8;">Bakiye Yükleyin veya Özel Kupon Kodunuzu Kullanın</div>
+      </div>
+
+      <!-- Promo Code Section -->
+      <div class="coupon-redemption-card">
+        <div class="coupon-header-tag">🎁 PROMOSYON KODU KULLAN</div>
+        <div style="font-size: 12px; color: #94a3b8; margin-bottom: 8px;">
+          Özel etkinlik kodunuzu girerek anında <strong>15.000 Altın</strong> kazanın (İlk 5 Kişi):
+        </div>
+        <div class="coupon-input-row">
+          <input type="text" id="coupon-code-input" placeholder="Kupon Kodunu Girin (örn: corromax)" maxlength="20">
+          <button class="btn-redeem-coupon" onclick="handleRedeemCoupon()">KODU KULLAN</button>
+        </div>
+        <div id="coupon-feedback" style="display: none; margin-top: 8px; font-size: 13px; font-weight: 800;"></div>
+      </div>
+
+      <!-- Top Up Packages -->
+      <div style="font-size: 15px; font-weight: 900; margin: 18px 0 10px 0; color: #38bdf8;">⚡ BAKİYE PAKETLERİ (GERÇEK PARA SİMÜLASYONU)</div>
+      <div class="currency-packs-grid">
+        <div class="pack-card" onclick="topUpCurrency('coins', 15000, 4.99)">
+          <div class="pack-icon">🪙</div>
+          <div class="pack-amount">+15,000 Altın</div>
+          <div class="pack-desc">Minigun & RPG Almak İçin İdeal!</div>
+          <button class="btn-buy-pack">$4.99</button>
+        </div>
+        <div class="pack-card" onclick="topUpCurrency('coins', 50000, 12.99)">
+          <div class="pack-icon">💰</div>
+          <div class="pack-amount">+50,000 Altın</div>
+          <div class="pack-desc">Tüm Silahları ve Skinleri Aç!</div>
+          <button class="btn-buy-pack">$12.99</button>
+        </div>
+        <div class="pack-card" onclick="topUpCurrency('gems', 250, 4.99)">
+          <div class="pack-icon">💎</div>
+          <div class="pack-amount">+250 Elmas</div>
+          <div class="pack-desc">Karambit Gold Bıçağı Al!</div>
+          <button class="btn-buy-pack">$4.99</button>
+        </div>
+        <div class="pack-card" onclick="topUpCurrency('gems', 1000, 14.99)">
+          <div class="pack-icon">💎</div>
+          <div class="pack-amount">+1,000 Elmas</div>
+          <div class="pack-desc">Kozmik & Mythic Karambit İçin!</div>
+          <button class="btn-buy-pack">$14.99</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 7. ENSAR ADMIN PANEL MODAL -->
+  <div id="admin-modal" class="custom-modal-overlay">
+    <div class="custom-modal-card" style="max-width: 1150px; width: 96%; max-height: 90vh; overflow-y: auto;">
+      <button class="btn-modal-close" onclick="closeAdminModal()">✖</button>
+      
+      <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid rgba(239, 68, 68, 0.4); padding-bottom: 12px; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="font-size: 32px;">⚡</div>
+          <div>
+            <div style="font-size: 24px; font-weight: 900; color: #f87171; letter-spacing: 0.5px;">ENSAR ADMIN KONTROL MERKEZİ</div>
+            <div style="font-size: 13px; color: #94a3b8;">Oyuncu Yönetimi, Bakiye Ekleme, Banlama / Yetkilendirme & Canlı İzleme</div>
+          </div>
+        </div>
+        <button class="btn-create-private-game" onclick="refreshAdminData()" style="padding: 8px 18px; font-size: 13px; background: linear-gradient(180deg, #ef4444 0%, #b91c1c 100%);">🔄 Verileri Yenile</button>
+      </div>
+
+      <!-- Live Server Metrics -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 18px;">
+        <div style="background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 10px; padding: 12px; text-align: center;">
+          <div style="font-size: 11px; font-weight: 800; color: #94a3b8; letter-spacing: 1px;">KAYITLI OYUNCULAR</div>
+          <div id="admin-total-users" style="font-size: 28px; font-weight: 900; color: #f87171;">0</div>
+        </div>
+        <div style="background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 10px; padding: 12px; text-align: center;">
+          <div style="font-size: 11px; font-weight: 800; color: #94a3b8; letter-spacing: 1px;">AKTİF ONLİNE</div>
+          <div id="admin-online-users" style="font-size: 28px; font-weight: 900; color: #34d399;">0</div>
+        </div>
+        <div style="background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 10px; padding: 12px; text-align: center;">
+          <div style="font-size: 11px; font-weight: 800; color: #94a3b8; letter-spacing: 1px;">BANLI OYUNCULAR</div>
+          <div id="admin-banned-users" style="font-size: 28px; font-weight: 900; color: #f59e0b;">0</div>
+        </div>
+        <div style="background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 10px; padding: 12px; text-align: center;">
+          <div style="font-size: 11px; font-weight: 800; color: #94a3b8; letter-spacing: 1px;">CANLI ODALAR</div>
+          <div id="admin-active-rooms" style="font-size: 28px; font-weight: 900; color: #38bdf8;">0</div>
+        </div>
+      </div>
+
+      <!-- User Management Table -->
+      <div style="background: rgba(15, 23, 42, 0.95); border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.1); overflow-x: auto; box-shadow: inset 0 0 20px rgba(0,0,0,0.5);">
+        <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px;">
+          <thead>
+            <tr style="background: rgba(30, 41, 59, 0.95); color: #cbd5e1; border-bottom: 2px solid rgba(239, 68, 68, 0.3);">
+              <th style="padding: 12px 14px;">Kullanıcı & Bilgi</th>
+              <th style="padding: 12px 14px;">Durum</th>
+              <th style="padding: 12px 14px;">Level</th>
+              <th style="padding: 12px 14px;">Altın 🪙</th>
+              <th style="padding: 12px 14px;">Elmas 💎</th>
+              <th style="padding: 12px 14px;">K/D & Skor</th>
+              <th style="padding: 12px 14px; text-align: center;">Admin</th>
+              <th style="padding: 12px 14px; text-align: center;">Yönetim & Ban</th>
+            </tr>
+          </thead>
+          <tbody id="admin-users-table-body">
+            <!-- Dynamically populated rows -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Admin Coupon Generator & Management -->
+      <div style="margin-top: 24px; background: rgba(15, 23, 42, 0.95); border-radius: 12px; border: 1px solid rgba(245, 158, 11, 0.4); padding: 18px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
+        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(245, 158, 11, 0.3); padding-bottom: 10px; margin-bottom: 14px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 22px;">🎟️</span>
+            <div>
+              <div style="font-size: 16px; font-weight: 900; color: #fbbf24;">KUPON YÖNETİMİ & KOD OLUŞTURMA</div>
+              <div style="font-size: 12px; color: #94a3b8;">Oyuncular için kupon kodu üretin, ödül miktarını ve kaç kişinin kullanacağını belirleyin.</div>
+            </div>
+          </div>
+          <button class="btn-create-private-game" onclick="window.loadAdminCoupons()" style="padding: 5px 12px; font-size: 11px; background: rgba(245, 158, 11, 0.2); border: 1px solid #f59e0b; color: #fbbf24;">🔄 Kuponları Yenile</button>
+        </div>
+
+        <!-- Create Coupon Form -->
+        <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; background: rgba(30, 41, 59, 0.6); padding: 12px; border-radius: 8px; margin-bottom: 16px;">
+          <input type="text" id="admin-coupon-code" placeholder="Kupon Kodu (Örn: HEDIYE2026)" style="flex: 1.5; min-width: 160px; background: #090d16; border: 1px solid #334155; border-radius: 6px; padding: 8px 12px; color: #fff; font-weight: 800; text-transform: uppercase;" />
+          <input type="number" id="admin-coupon-coins" placeholder="Altın Ödülü 🪙" style="flex: 1; min-width: 110px; background: #090d16; border: 1px solid #334155; border-radius: 6px; padding: 8px 12px; color: #fbbf24; font-weight: 800;" />
+          <input type="number" id="admin-coupon-gems" placeholder="Elmas Ödülü 💎" style="flex: 1; min-width: 110px; background: #090d16; border: 1px solid #334155; border-radius: 6px; padding: 8px 12px; color: #38bdf8; font-weight: 800;" />
+          <input type="number" id="admin-coupon-limit" placeholder="Kişi Sayısı (Limit)" style="flex: 1; min-width: 120px; background: #090d16; border: 1px solid #334155; border-radius: 6px; padding: 8px 12px; color: #34d399; font-weight: 800;" value="5" min="1" />
+          <button onclick="window.createAdminCouponSubmit()" style="background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%); border: 1px solid #fbbf24; color: #fff; font-weight: 900; padding: 8px 18px; border-radius: 6px; cursor: pointer;">✨ KUPON OLUŞTUR</button>
+        </div>
+
+        <div id="admin-coupon-msg" style="display: none; padding: 8px 12px; border-radius: 6px; font-weight: 800; font-size: 13px; margin-bottom: 12px;"></div>
+
+        <!-- Existing Coupons List -->
+        <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 12px;">
+          <thead>
+            <tr style="background: rgba(30, 41, 59, 0.8); color: #cbd5e1; border-bottom: 1px solid rgba(255,255,255,0.1);">
+              <th style="padding: 8px 12px;">Kupon Kodu</th>
+              <th style="padding: 8px 12px;">Altın 🪙</th>
+              <th style="padding: 8px 12px;">Elmas 💎</th>
+              <th style="padding: 8px 12px;">Kullanım Durumu</th>
+              <th style="padding: 8px 12px;">Kullanan Oyuncular</th>
+              <th style="padding: 8px 12px; text-align: center;">İşlem</th>
+            </tr>
+          </thead>
+          <tbody id="admin-coupons-table-body">
+            <!-- Dynamically populated coupons -->
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- IN-GAME TAB SCOREBOARD (HOLDS WHILE TAB IS PRESSED) -->
+  <div id="tab-scoreboard" class="tab-scoreboard-overlay" style="display: none;">
+    <div class="tab-scoreboard-modal">
+      <div class="tab-scoreboard-header">
+        <div class="sb-title-box">
+          <span class="sb-logo-text">CORROPROMAX</span>
+          <span class="sb-room-pill" id="sb-room-badge">ODA: FFA</span>
+        </div>
+        <div class="sb-center-leader" id="sb-leader-badge">
+          👑 EN ÇOK ÖLDÜREN: <span id="sb-top-killer-name" style="color: #ffd700; font-weight: 900;">Yükleniyor...</span>
+        </div>
+        <div class="sb-timer-pill" id="sb-timer-display">10:00</div>
+      </div>
+
+      <div class="tab-scoreboard-table-wrap">
+        <table class="tab-scoreboard-table">
+          <thead>
+            <tr>
+              <th style="width: 60px; text-align: center;">SIRA</th>
+              <th style="text-align: left; padding-left: 18px;">OYUNCU</th>
+              <th style="text-align: center; color: #4ade80;">⚔️ ÖLDÜRME (K)</th>
+              <th style="text-align: center; color: #f87171;">💀 ÖLÜM (D)</th>
+              <th style="text-align: center; color: #93c5fd;">📊 K/D</th>
+              <th style="text-align: center; color: #facc15;">⭐ SKOR</th>
+              <th style="text-align: center; color: #94a3b8;">📶 PİNG</th>
+            </tr>
+          </thead>
+          <tbody id="scoreboard-rows">
+            <!-- Dynamically populated rows sorted by KILLS -->
+          </tbody>
+        </table>
+      </div>
+
+      <div class="tab-scoreboard-footer">
+        <span>💡 [TAB] tuşunu basılı tutarak anlık skor ve lideri görüntüleyebilirsiniz.</span>
+        <span style="color: #4ade80; font-weight: 800;">En çok kişiyi öldüren maçın şampiyonu olur!</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- FRIENDS & ROOM INVITATION MODAL -->
+  <div id="friends-modal" class="modal-overlay custom-modal-overlay" style="display: none; z-index: 10050;">
+    <div class="friends-modal-box">
+      <div class="friends-modal-header">
+        <div class="friends-modal-title">
+          <span style="font-size: 26px;">👥</span>
+          <div>
+            <div style="font-size: 20px; font-weight: 900; letter-spacing: 1px; color: #fff;">ARKADAŞ LİSTESİ & MAÇ DAVETİ</div>
+            <div style="font-size: 12px; color: #94a3b8; font-weight: 600;">Arkadaş ekle, online durumunu gör ve tek tıkla maça çağır!</div>
+          </div>
+        </div>
+        <button class="modal-close-btn btn-modal-close" onclick="closeFriendsModal()">✖</button>
+      </div>
+
+      <!-- Add Friend Box -->
+      <div class="friends-add-bar">
+        <input type="text" id="friend-username-input" class="friend-input" placeholder="Arkadaşının tam kullanıcı adını gir..." maxlength="24" autocomplete="off" />
+        <button class="btn-friend-add-action" onclick="handleAddFriendSubmit()">+ Arkadaş Ekle</button>
+      </div>
+      <div id="friend-action-msg" class="friend-action-msg" style="display: none;"></div>
+
+      <!-- Friends List -->
+      <div class="friends-list-container">
+        <div class="friends-list-header">
+          <span>Kayıtlı Arkadaşların (<span id="friends-count">0</span>)</span>
+          <button class="btn-friend-refresh" onclick="loadFriendsList()">🔄 Yenile</button>
+        </div>
+        <div id="friends-list-body" class="friends-list-body">
+          <div style="padding: 30px; text-align: center; color: #94a3b8;">Yükleniyor...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- REALTIME MATCH INVITATION POPUP BANNER (LOBBY & IN-GAME) -->
+  <div id="match-invite-banner" class="match-invite-banner" style="display: none;">
+    <div class="invite-banner-inner">
+      <div class="invite-banner-icon">🎮</div>
+      <div class="invite-banner-text">
+        <div class="invite-banner-title">MAÇ DAVETİ ALINDI!</div>
+        <div class="invite-banner-desc"><b id="invite-from-user" style="color: #38bdf8;">Arkadaşın</b> seni maça çağırıyor!</div>
+        <div class="invite-banner-details">Oda: <span id="invite-room-code" style="color: #4ade80; font-weight: 800;">---</span> • Mod: <span id="invite-room-mode" style="color: #facc15; font-weight: 800;">FFA</span></div>
+      </div>
+      <div class="invite-banner-actions">
+        <button class="btn-invite-accept" onclick="acceptCurrentInvite()">✅ KATIL</button>
+        <button class="btn-invite-decline" onclick="declineCurrentInvite()">❌ REDDET</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CLICK TO FOCUS OVERLAY (WHEN RESUMING FROM ESCAPE OR LOSING LOCK IN BATTLE) -->
+  <div id="click-to-focus-overlay" class="click-to-focus-overlay" style="display: none;">
+    <div class="click-to-focus-card">
+      <span class="click-focus-icon">🎯</span>
+      <div class="click-focus-text">
+        <div class="click-focus-title">OYUNA DEVAM ETMEK İÇİN TIKLAYIN</div>
+        <div class="click-focus-sub">Fareyi oyuna kilitler (Mermi harcamaz)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- REALTIME GLOBAL TOAST CONTAINER -->
+  <div id="global-toast-container" class="global-toast-container"></div>
+
+  <!-- OKUL / MEB KAMUFLAJ VE DERS NOTLARI EKRANI (F9 İLE AÇILIR/KAPANIR) -->
+  <div id="school-panic-screen" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #f8fafc; color: #1e293b; z-index: 999999; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow-y: auto;">
+    <div style="background: #e11d48; color: #fff; padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 10px rgba(0,0,0,0.15);">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <span style="font-size: 28px;">🇹🇷</span>
+        <div>
+          <div style="font-size: 16px; font-weight: 800; letter-spacing: 0.5px;">T.C. MİLLÎ EĞİTİM BAKANLIĞI • EBA DERS AKIŞI</div>
+          <div style="font-size: 11px; opacity: 0.9;">Bilişim Teknolojileri ve 3D Fizik Modelleme Çalışma Alanı</div>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 14px;">
+        <span style="font-size: 13px; background: rgba(255,255,255,0.2); padding: 4px 10px; border-radius: 6px;">Ders: Fizik - 11. Sınıf</span>
+        <button onclick="toggleSchoolDisguise()" style="background: rgba(255,255,255,0.25); border: 1px solid rgba(255,255,255,0.4); color: white; border-radius: 6px; padding: 5px 12px; cursor: pointer; font-size: 12px; font-weight: bold;">✕ Kapat (F9)</button>
+      </div>
+    </div>
+
+    <div style="max-width: 960px; margin: 28px auto; padding: 0 20px;">
+      <div style="background: #fff; border-radius: 10px; padding: 24px; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px;">
+        <h2 style="color: #0f172a; margin-top: 0; font-size: 20px; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px;">
+          📚 Ünite 1: 3 Boyutlu Vektör Uzayı ve Dinamik Hareket Prensipleri
+        </h2>
+        <p style="color: #475569; line-height: 1.6; font-size: 14px;">
+          Üç boyutlu kartezyen koordinat sisteminde bir cismin hareket denklemleri, Newton'un temel hareket yasaları üzerinden ifade edilir. Bir parçacığın konum vektörü <strong>r(t) = x(t)î + y(t)ĵ + z(t)k̂</strong> fonksiyonuyla modellenir.
+        </p>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin: 18px 0;">
+          <div style="background: #f8fafc; border-left: 4px solid #3b82f6; padding: 12px 16px; border-radius: 6px;">
+            <div style="font-weight: bold; color: #1d4ed8; font-size: 13px;">Temel Dinamik Yasası</div>
+            <div style="font-size: 16px; font-weight: 800; color: #0f172a; margin: 6px 0;">F_net = m · a</div>
+            <div style="font-size: 12px; color: #64748b;">Kuvvet (N), kütle (kg) ve ivme (m/s²) çarpımıdır.</div>
+          </div>
+          <div style="background: #f8fafc; border-left: 4px solid #10b981; padding: 12px 16px; border-radius: 6px;">
+            <div style="font-weight: bold; color: #047857; font-size: 13px;">Kinetik Enerji Teoremi</div>
+            <div style="font-size: 16px; font-weight: 800; color: #0f172a; margin: 6px 0;">E_k = ½ · m · v²</div>
+            <div style="font-size: 12px; color: #64748b;">Hızlanan bir parçacığın kazandığı mekanik enerji.</div>
+          </div>
+          <div style="background: #f8fafc; border-left: 4px solid #f59e0b; padding: 12px 16px; border-radius: 6px;">
+            <div style="font-weight: bold; color: #b45309; font-size: 13px;">Yerçekimi ve Eğik Atış</div>
+            <div style="font-size: 16px; font-weight: 800; color: #0f172a; margin: 6px 0;">y(t) = v₀·sin(θ)·t - ½·g·t²</div>
+            <div style="font-size: 12px; color: #64748b;">Düşey eksendeki ivmeli hareket bileşeni.</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background: #fff; border-radius: 10px; padding: 24px; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+        <h3 style="color: #0f172a; margin-top: 0; font-size: 16px;">Öğrenci Notları & Çalışma Özeti</h3>
+        <p style="color: #64748b; font-size: 13px; line-height: 1.6;">
+          Ders simülasyonundaki parametreler: Sürtünme katsayısı, yerçekimi ivmesi (g = 9.8 m/s²) ve çarpışma esneklik katsayısı olarak sisteme entegre edilmiştir.
+        </p>
+        <div style="font-size: 12px; color: #94a3b8; margin-top: 14px;">
+          Son güncelleme: MEB Bilişim Ağı • Çevrimiçi Modül
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Game Scripts with Cache Busters -->
+  <script src="js/audio.js?v=20260930_14"></script>
+  <script src="js/models.js?v=20260930_14"></script>
+  <script src="js/game.js?v=20260930_14"></script>
+</body>
+</html>

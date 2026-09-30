@@ -1,0 +1,10 @@
+{
+  "corromax": {
+    "code": "corromax",
+    "coinsReward": 15000,
+    "gemsReward": 0,
+    "maxUses": 5,
+    "usedCount": 0,
+    "usedByUsers": []
+  }
+}
