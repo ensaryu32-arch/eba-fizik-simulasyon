@@ -1,12 +1,24 @@
 // Veck.io Complete 3D Engine with Weapon Deploy FX, Knife/Grenade Viewmodels, Wall Raycast Blocking, 10-Min Timer, and Loadout Modal
 
+const RANDOM_GUEST_NAMES = [
+  'GölgeAvcı', 'Fırtına', 'Bozkurt', 'Şahin', 'Poyraz', 'DemirYumruk', 'Kasırga', 'Yıldırım', 'Akrep', 'Pars', 'Kartal', 'Hayalet'
+];
+function getRandomDefaultGuestName() {
+  const base = RANDOM_GUEST_NAMES[Math.floor(Math.random() * RANDOM_GUEST_NAMES.length)];
+  return `${base}_${Math.floor(10 + Math.random() * 90)}`;
+}
+
+const savedLocalNick = localStorage.getItem('veck_saved_name');
+const initialNick = (savedLocalNick && savedLocalNick !== 'ensar44' && savedLocalNick !== 'ensar') ? savedLocalNick : getRandomDefaultGuestName();
+
 const state = {
   mode: 'lobby',
   matchType: 'FFA',
   isPaused: false,
   isPrivateRoom: false,
   roomId: 'M73MNGX8',
-  myName: 'Player_' + Math.floor(1000 + Math.random() * 9000),
+  myName: initialNick,
+  mouseSensitivity: parseFloat(localStorage.getItem('veck_sensitivity')) || 0.0016,
   level: 0,
   xp: 0,
   coins: 0,
@@ -15,6 +27,7 @@ const state = {
   isLoggedIn: false,
   currentSlot: 1, // 1: Primary, 2: Secondary, 3: Knife, 4: Grenade
   prevSlot: 2,
+  slotAmmo: { 1: 30, 2: 15, 3: 1, 4: 2 },
   equippedGuns: {
     1: 'AK-47',
     2: 'Pistol',
@@ -512,14 +525,19 @@ function createRemotePlayer(p) {
     if (p.x !== undefined) existing.targetPos.set(p.x, p.y, p.z);
     return;
   }
+  // In FFA (Free For All) and standard matches, opponents are ENEMIES!
+  const isTeammate = (state.matchType === 'TDM' && p.team && p.team === state.myTeam);
+  const teamColor = isTeammate ? 'blue' : 'red';
+  const shirtColor = isTeammate ? 0x3b82f6 : 0xdc2626;
+
   const avatar = createBlockyCharacter({
     name: p.name || 'Oyuncu',
-    level: 7,
-    shirtColor: 0x3b82f6,
+    level: p.level || 7,
+    shirtColor: shirtColor,
     pantsColor: 0x1f2438,
-    isEnemy: true,
-    teamColor: 'blue',
-    weaponType: 'ak47'
+    isEnemy: !isTeammate,
+    teamColor: teamColor,
+    weaponType: (p.gun === 'Pistol' || p.gun === 'Deagle') ? 'pistol' : 'ak47'
   });
   const initX = (p.x !== undefined) ? p.x : 0;
   const initY = (p.y !== undefined) ? p.y : 0;
@@ -1100,7 +1118,8 @@ function setupControls() {
 
   window.addEventListener('mousemove', (e) => {
     if (isPointerLocked && state.mode === 'battle' && !state.isPaused && !state.isDead) {
-      const sens = state.isADS ? 0.0012 : 0.0022;
+      const baseSens = state.mouseSensitivity || 0.0016;
+      const sens = state.isADS ? baseSens * 0.55 : baseSens;
       playerRotY -= e.movementX * sens;
       headPitch -= e.movementY * sens;
       headPitch = Math.max(-1.45, Math.min(1.45, headPitch));
@@ -1133,7 +1152,8 @@ function setupControls() {
   });
 
   document.getElementById('player-name-input').addEventListener('input', (e) => {
-    state.myName = e.target.value.trim() || 'ensar';
+    state.myName = e.target.value.trim() || getRandomDefaultGuestName();
+    localStorage.setItem('veck_saved_name', state.myName);
     const pauseName = document.getElementById('pause-card-name');
     if (pauseName) {
       const adminTag = state.isAdmin ? '<span style="color:#ef4444; font-weight:900;">[ADMIN]</span> ' : '';
@@ -1329,7 +1349,9 @@ window.executeStartBattle = function(mode = 'FFA') {
   state.isDead = false;
   state.health = 150;
   state.matchSeconds = 10 * 60; // 10 minutes maximum match time
+  state.slotAmmo = { 1: 30, 2: 15, 3: 1, 4: 2 };
   state.ammo = getCurrentWeapon().maxAmmo;
+  state.slotAmmo[state.currentSlot] = state.ammo;
   state.isReloading = false;
 
   document.getElementById('ui-root').style.display = 'none';
@@ -1402,6 +1424,34 @@ window.pauseGame = function() {
   state.isPaused = true;
   hideFocusOverlay();
   document.exitPointerLock();
+
+  // If paused while in mid-air (jumping), settle down to ground immediately so player never freezes mid-air
+  const groundY = checkAndResolveCollisions(playerPos, 0.75);
+  if (playerPos.y > groundY) {
+    playerPos.y = groundY;
+    velocity.set(0, 0, 0);
+    isGrounded = true;
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({
+        type: 'move',
+        x: playerPos.x,
+        y: playerPos.y,
+        z: playerPos.z,
+        rotY: playerRotY,
+        headPitch: headPitch
+      }));
+    }
+  }
+
+  // Clear held keys so keys don't stay active
+  keys.w = false;
+  keys.a = false;
+  keys.s = false;
+  keys.d = false;
+  keys.space = false;
+  keys.shift = false;
+  isMouseDown = false;
+
   const pauseRoomId = document.getElementById('pause-room-id');
   if (pauseRoomId) pauseRoomId.textContent = state.roomId;
   
@@ -1421,14 +1471,43 @@ window.pauseGame = function() {
   const xpText = document.getElementById('pause-card-xp-text');
   if (xpText) xpText.textContent = `${1000 - currentLevelXp} XP to Next`;
 
+  const sensSlider = document.getElementById('pause-sens-slider');
+  const sensVal = document.getElementById('pause-sens-val');
+  const currentVal = ((state.mouseSensitivity || 0.0016) * 1000).toFixed(1);
+  if (sensSlider) sensSlider.value = currentVal;
+  if (sensVal) sensVal.textContent = currentVal;
+
   document.getElementById('pause-overlay').style.display = 'flex';
   window.soundFX.playClick();
+};
+
+window.updateMouseSensitivity = function(val) {
+  const num = parseFloat(val);
+  state.mouseSensitivity = num * 0.001;
+  localStorage.setItem('veck_sensitivity', state.mouseSensitivity);
+  const valEl = document.getElementById('pause-sens-val');
+  if (valEl) valEl.textContent = Number(num).toFixed(1);
 };
 
 window.resumeGame = function() {
   state.isPaused = false;
   document.getElementById('pause-overlay').style.display = 'none';
   window.soundFX.playClick();
+
+  // Ensure consistent grounding & clear keys
+  const groundY = checkAndResolveCollisions(playerPos, 0.75);
+  if (playerPos.y <= groundY) {
+    playerPos.y = groundY;
+    velocity.y = 0;
+    isGrounded = true;
+  }
+  keys.w = false;
+  keys.a = false;
+  keys.s = false;
+  keys.d = false;
+  keys.space = false;
+  keys.shift = false;
+  isMouseDown = false;
 
   try {
     const lockPromise = renderer.domElement.requestPointerLock();
@@ -1517,12 +1596,30 @@ function updateViewmodelVisibility() {
 
 // 100% RELIABLE WEAPON SWITCH WITH MECHANICAL AUDIO & SPRING DEPLOY FX
 window.switchSlot = function(slotNum) {
+  // If already on this slot, do NOTHING! Prevents ammo refill/drain bug when pressing 1 repeatedly!
   if (state.currentSlot === slotNum) return;
+
+  // Save current weapon magazine ammo
+  if (state.currentSlot) {
+    if (!state.slotAmmo) state.slotAmmo = { 1: 30, 2: 15, 3: 1, 4: 2 };
+    state.slotAmmo[state.currentSlot] = state.ammo;
+  }
+
   state.prevSlot = state.currentSlot;
   state.currentSlot = slotNum;
   const w = getCurrentWeapon();
-  state.ammo = w.maxAmmo;
+
+  // Restore saved ammo for this slot
+  if (!state.slotAmmo) state.slotAmmo = { 1: 30, 2: 15, 3: 1, 4: 2 };
+  if (state.slotAmmo[slotNum] !== undefined) {
+    state.ammo = state.slotAmmo[slotNum];
+  } else {
+    state.ammo = w.maxAmmo;
+    state.slotAmmo[slotNum] = w.maxAmmo;
+  }
+
   state.isReloading = false;
+  state.reloadTimer = 0;
 
   updateAmmoUI();
   updateViewmodelVisibility();
@@ -1687,6 +1784,8 @@ function shoot() {
 
   lastShotTime = now;
   state.ammo--;
+  if (!state.slotAmmo) state.slotAmmo = { 1: 30, 2: 15, 3: 1, 4: 2 };
+  state.slotAmmo[state.currentSlot] = state.ammo;
   updateAmmoUI();
   if (state.ammo === 0) {
     setTimeout(startReload, 80);
@@ -2179,20 +2278,30 @@ function gameLoop(time) {
         currentPos.lerp(targetPos, Math.min(1, delta * 20));
       }
 
-      // Smooth rotation Y
+      // Smooth rotation Y: Add Math.PI so character front faces EXACTLY where camera looks!
       if (rp.targetRotY !== undefined) {
-        let diff = rp.targetRotY - rp.group.rotation.y;
+        const desiredRotY = rp.targetRotY + Math.PI;
+        let diff = desiredRotY - rp.group.rotation.y;
         while (diff > Math.PI) diff -= Math.PI * 2;
         while (diff < -Math.PI) diff += Math.PI * 2;
         rp.group.rotation.y += diff * Math.min(1, delta * 20);
       }
 
-      // Smooth head pitch
-      if (rp.head && rp.targetHeadPitch !== undefined) {
-        rp.head.rotation.x += (rp.targetHeadPitch - rp.head.rotation.x) * Math.min(1, delta * 15);
+      // Smooth head pitch & Tactical Arm/Weapon Aiming
+      const pitch = (rp.targetHeadPitch !== undefined) ? rp.targetHeadPitch : 0;
+      if (rp.head) {
+        rp.head.rotation.x = -pitch;
       }
 
-      // Legs / arms walking & airborne animations
+      // Aim weapon and arms directly up/down at target!
+      if (rp.rightArm) {
+        rp.rightArm.rotation.set(-1.35 - pitch, -0.15, 0);
+      }
+      if (rp.leftArm) {
+        rp.leftArm.rotation.set(-1.22 - pitch, 0.45, -0.2);
+      }
+
+      // Legs walking & airborne animations
       const horizDist = Math.hypot(targetPos.x - currentPos.x, targetPos.z - currentPos.z);
       const isAirborne = currentPos.y > 0.4;
 
@@ -2203,11 +2312,9 @@ function gameLoop(time) {
         rp.walkPhase = (rp.walkPhase || 0) + delta * 14;
         if (rp.leftLeg) rp.leftLeg.rotation.x = Math.sin(rp.walkPhase) * 0.6;
         if (rp.rightLeg) rp.rightLeg.rotation.x = -Math.sin(rp.walkPhase) * 0.6;
-        if (rp.leftArm) rp.leftArm.rotation.x = -Math.sin(rp.walkPhase) * 0.45;
       } else {
         if (rp.leftLeg) rp.leftLeg.rotation.x *= 0.85;
         if (rp.rightLeg) rp.rightLeg.rotation.x *= 0.85;
-        if (rp.leftArm) rp.leftArm.rotation.x *= 0.85;
       }
     });
 
@@ -2239,6 +2346,8 @@ function gameLoop(time) {
       if (state.reloadTimer >= state.reloadDuration) {
         state.isReloading = false;
         state.ammo = getCurrentWeapon().maxAmmo;
+        if (!state.slotAmmo) state.slotAmmo = { 1: 30, 2: 15, 3: 1, 4: 2 };
+        state.slotAmmo[state.currentSlot] = state.ammo;
         updateAmmoUI();
         if (activeGun && activeGun.mag) activeGun.mag.position.y = -0.22;
       }
@@ -2553,7 +2662,7 @@ function updateCurrencyUI() {
   if (profileXp) profileXp.textContent = state.xp;
   if (profileName) profileName.textContent = state.myName;
   if (lobbyLvl) lobbyLvl.textContent = `⭐ ${state.level}`;
-  if (nameInput && !state.isLoggedIn) state.myName = nameInput.value || 'ensar44';
+  if (nameInput && !state.isLoggedIn) state.myName = (nameInput.value && nameInput.value.trim()) ? nameInput.value.trim() : (state.myName || getRandomDefaultGuestName());
   if (bpName) bpName.innerHTML = `<span style="color: #00f0ff;">[edip]</span> ${state.myName}`;
   if (bpLvl) bpLvl.textContent = `lvl ${state.level}`;
 

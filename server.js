@@ -1046,9 +1046,12 @@ wss.on('connection', (ws) => {
   const playerId = 'player_' + (nextPlayerId++);
   let currentRoomId = 'public_ffa';
 
+  const defaultGuestNames = ['GölgeAvcı', 'Fırtına', 'Bozkurt', 'Şahin', 'Poyraz', 'DemirYumruk', 'Kasırga', 'Yıldırım', 'Akrep', 'Pars'];
+  const randomGuestName = defaultGuestNames[Math.floor(Math.random() * defaultGuestNames.length)] + '_' + Math.floor(10 + Math.random() * 90);
+
   const playerData = {
     id: playerId,
-    name: 'ensar44',
+    name: randomGuestName,
     x: 0, y: 0, z: 15,
     rotY: 0, headPitch: 0,
     health: 150, maxHealth: 150,

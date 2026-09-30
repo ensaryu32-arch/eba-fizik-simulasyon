@@ -1865,13 +1865,16 @@ function createBlockyCharacter(options = {}) {
   let heldWeapon = null;
   if (options.isEnemy || options.isBot || options.weaponType) {
     heldWeapon = options.weaponType === 'pistol' ? createTwoTonePistolModel(false) : createAuthenticAK47Model(false);
-    heldWeapon.position.set(0, -0.45, -0.38);
-    heldWeapon.rotation.set(0.1, -0.05, 0);
+    // Scale up weapon so it is prominently visible in 3rd person
+    heldWeapon.scale.set(1.35, 1.35, 1.35);
+    // Position weapon in hand and align barrel along arm aim vector
+    heldWeapon.position.set(-0.05, -0.72, 0.12);
+    heldWeapon.rotation.set(1.42, -0.05, 0.05);
     rightArm.add(heldWeapon);
 
     // Natural 2-Hand Tactical Aiming Pose
-    rightArm.rotation.set(-1.25, -0.2, 0);
-    leftArm.rotation.set(-1.15, 0.5, -0.25);
+    rightArm.rotation.set(-1.35, -0.15, 0);
+    leftArm.rotation.set(-1.22, 0.45, -0.2);
   }
 
   // Overhead Floating Nickname & Health Plate
