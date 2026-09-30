@@ -1170,6 +1170,10 @@ wss.on('connection', (ws) => {
         ws.roomId = currentRoomId;
 
         playerData.name = data.name || playerData.name;
+        if (data.x !== undefined) playerData.x = data.x;
+        if (data.y !== undefined) playerData.y = data.y;
+        if (data.z !== undefined) playerData.z = data.z;
+        if (data.rotY !== undefined) playerData.rotY = data.rotY;
         targetRoom.players.set(playerId, playerData);
 
         if (playerData.name) {
@@ -1226,13 +1230,42 @@ wss.on('connection', (ws) => {
       }
 
       if (data.type === 'player_hit') {
+        const attackerName = ws.username || playerData.name || 'Oyuncu';
         broadcastToRoom(currentRoomId, {
           type: 'player_damaged',
           targetId: data.targetId,
           damage: data.damage,
           attackerId: playerId,
-          isHeadshot: data.isHeadshot
+          attackerName: attackerName,
+          isHeadshot: data.isHeadshot,
+          gun: data.gun || 'AK-47'
         });
+      }
+
+      if (data.type === 'player_died') {
+        const victimName = ws.username || playerData.name || 'Oyuncu';
+        broadcastToRoom(currentRoomId, {
+          type: 'player_died',
+          targetId: playerId,
+          victimName: victimName,
+          attackerId: data.attackerId,
+          attackerName: data.attackerName || 'Düşman',
+          isHeadshot: !!data.isHeadshot,
+          gun: data.gun || 'AK-47'
+        });
+      }
+
+      if (data.type === 'player_respawned') {
+        playerData.x = data.x;
+        playerData.y = data.y;
+        playerData.z = data.z;
+        broadcastToRoom(currentRoomId, {
+          type: 'player_respawned',
+          id: playerId,
+          x: data.x,
+          y: data.y,
+          z: data.z
+        }, ws);
       }
 
     } catch (err) {}

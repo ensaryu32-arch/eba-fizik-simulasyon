@@ -302,29 +302,163 @@ function initWebSocket() {
         username: state.myName
       }));
     }
+    if (state.mode === 'battle') {
+      socket.send(JSON.stringify({
+        type: 'join_room',
+        roomId: state.roomId,
+        isPrivate: state.isPrivateRoom,
+        mode: state.matchType,
+        name: state.myName,
+        x: playerPos.x,
+        y: playerPos.y,
+        z: playerPos.z,
+        rotY: playerRotY
+      }));
+    }
   };
 
   socket.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data);
 
+      if (data.type === 'room_joined') {
+        state.myPlayerId = data.id;
+
+        // Clean up previous remote players
+        remotePlayers.forEach(rp => {
+          if (rp.group) scene.remove(rp.group);
+        });
+        remotePlayers.clear();
+
+        // Spawn all players currently in the room
+        if (Array.isArray(data.players)) {
+          data.players.forEach(p => {
+            if (p.id !== data.id) {
+              createRemotePlayer(p);
+            }
+          });
+        }
+      }
+
       if (data.type === 'player_joined') {
-        createRemotePlayer(data.player);
+        if (data.player && data.player.id !== state.myPlayerId) {
+          createRemotePlayer(data.player);
+          showGlobalNotification(`🎮 "${data.player.name || 'Oyuncu'}" odaya katıldı!`, 'info');
+        }
       }
 
       if (data.type === 'player_moved') {
         const rp = remotePlayers.get(data.id);
         if (rp) {
-          rp.group.position.set(data.x, data.y, data.z);
-          rp.group.rotation.y = data.rotY;
+          rp.targetPos.set(data.x, data.y, data.z);
+          rp.targetRotY = data.rotY;
+          rp.targetHeadPitch = data.headPitch || 0;
         }
       }
 
       if (data.type === 'player_left') {
         const rp = remotePlayers.get(data.id);
         if (rp) {
-          scene.remove(rp.group);
+          if (rp.group) scene.remove(rp.group);
           remotePlayers.delete(data.id);
+        }
+      }
+
+      if (data.type === 'player_damaged') {
+        if (data.targetId === state.myPlayerId) {
+          // Local player took damage from someone!
+          if (state.mode === 'battle' && !state.isDead) {
+            state.health = Math.max(0, state.health - data.damage);
+            updateHealthUI();
+            if (window.soundFX && window.soundFX.playHit) window.soundFX.playHit();
+            triggerDamageFlash();
+
+            if (state.health <= 0) {
+              state.isDead = true;
+              state.deaths++;
+              showFeed(`${data.attackerName || 'Düşman'} ⚔️ ${state.myName}${data.isHeadshot ? ' (HEADSHOT)' : ''}`);
+              showDeathCallout(data.attackerName || 'Düşman', data.gun || 'AK-47');
+              updateViewmodelVisibility();
+              if (state.isTabOpen) updateScoreboardUI();
+
+              if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({
+                  type: 'player_died',
+                  attackerId: data.attackerId,
+                  attackerName: data.attackerName,
+                  isHeadshot: data.isHeadshot,
+                  gun: data.gun
+                }));
+              }
+
+              setTimeout(() => {
+                state.health = 150;
+                state.isDead = false;
+                state.ammo = getCurrentWeapon().maxAmmo;
+                updateHealthUI();
+                updateAmmoUI();
+                updateViewmodelVisibility();
+                const pSpawn = getRandomSpawn();
+                playerPos.set(pSpawn.x, 0, pSpawn.z);
+                velocity.set(0, 0, 0);
+
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                  socket.send(JSON.stringify({
+                    type: 'player_respawned',
+                    x: playerPos.x,
+                    y: playerPos.y,
+                    z: playerPos.z
+                  }));
+                }
+              }, 2800);
+            }
+          }
+        } else {
+          // Remote player took damage
+          const rp = remotePlayers.get(data.targetId);
+          if (rp) {
+            rp.health = Math.max(0, (rp.health !== undefined ? rp.health : 150) - data.damage);
+            if (rp.hpFill) {
+              rp.hpFill.scale.x = Math.max(0, rp.health / 150);
+            }
+          }
+        }
+      }
+
+      if (data.type === 'player_died') {
+        showFeed(`${data.attackerName || 'Düşman'} ⚔️ ${data.victimName || 'Oyuncu'}${data.isHeadshot ? ' (HEADSHOT)' : ''}`);
+
+        // If I made the kill!
+        if (data.attackerId === state.myPlayerId) {
+          state.kills++;
+          state.score += (data.isHeadshot ? 150 : 100);
+          if (!state.stats) state.stats = { kills: 0, score: 0, headshots: 0, matchesPlayed: 0, matchesWon: 0, casesOpened: 0, heavyKills: 0, slidesUsed: 0 };
+          state.stats.kills = (state.stats.kills || 0) + 1;
+          state.stats.score = (state.stats.score || 0) + (data.isHeadshot ? 150 : 100);
+          if (data.isHeadshot) state.stats.headshots = (state.stats.headshots || 0) + 1;
+
+          const scoreEl = document.getElementById('player-score');
+          if (scoreEl) scoreEl.textContent = state.kills;
+          triggerHitmarker();
+          if (window.soundFX && window.soundFX.playKillSound) window.soundFX.playKillSound();
+        }
+
+        const rp = remotePlayers.get(data.targetId);
+        if (rp) {
+          rp.isDead = true;
+          if (rp.group) rp.group.visible = false;
+        }
+      }
+
+      if (data.type === 'player_respawned') {
+        const rp = remotePlayers.get(data.id);
+        if (rp) {
+          rp.isDead = false;
+          rp.health = 150;
+          if (rp.hpFill) rp.hpFill.scale.x = 1;
+          rp.group.position.set(data.x, data.y, data.z);
+          rp.targetPos.set(data.x, data.y, data.z);
+          rp.group.visible = true;
         }
       }
 
@@ -371,9 +505,15 @@ function initWebSocket() {
 }
 
 function createRemotePlayer(p) {
-  if (remotePlayers.has(p.id)) return;
+  if (!p || !p.id) return;
+  if (p.id === state.myPlayerId) return;
+  if (remotePlayers.has(p.id)) {
+    const existing = remotePlayers.get(p.id);
+    if (p.x !== undefined) existing.targetPos.set(p.x, p.y, p.z);
+    return;
+  }
   const avatar = createBlockyCharacter({
-    name: p.name,
+    name: p.name || 'Oyuncu',
     level: 7,
     shirtColor: 0x3b82f6,
     pantsColor: 0x1f2438,
@@ -381,7 +521,20 @@ function createRemotePlayer(p) {
     teamColor: 'blue',
     weaponType: 'ak47'
   });
-  avatar.group.position.set(p.x, p.y, p.z);
+  const initX = (p.x !== undefined) ? p.x : 0;
+  const initY = (p.y !== undefined) ? p.y : 0;
+  const initZ = (p.z !== undefined) ? p.z : 0;
+
+  avatar.group.position.set(initX, initY, initZ);
+  avatar.targetPos = new THREE.Vector3(initX, initY, initZ);
+  avatar.targetRotY = p.rotY || 0;
+  avatar.targetHeadPitch = p.headPitch || 0;
+  avatar.health = 150;
+  avatar.maxHealth = 150;
+  avatar.name = p.name || 'Oyuncu';
+  avatar.walkPhase = 0;
+  avatar.isDead = false;
+
   scene.add(avatar.group);
   remotePlayers.set(p.id, avatar);
 }
@@ -479,13 +632,20 @@ function isLineOfSightBlocked(origin, targetPos) {
 
 function checkAndResolveCollisions(pos, radius = 0.75) {
   const colliders = getActiveColliders();
-  if (!colliders || colliders.length === 0) return;
+  if (!colliders || colliders.length === 0) return 0;
+
+  let highestGroundY = 0;
 
   for (const c of colliders) {
-    if (pos.y < c.maxY && pos.y + 1.8 > c.minY) {
-      if (pos.x + radius > c.minX && pos.x - radius < c.maxX &&
-          pos.z + radius > c.minZ && pos.z - radius < c.maxZ) {
-        
+    const inX = (pos.x + radius * 0.7 > c.minX && pos.x - radius * 0.7 < c.maxX);
+    const inZ = (pos.z + radius * 0.7 > c.minZ && pos.z - radius * 0.7 < c.maxZ);
+
+    if (inX && inZ) {
+      if (pos.y >= c.maxY - 0.35) {
+        if (c.maxY > highestGroundY) {
+          highestGroundY = c.maxY;
+        }
+      } else if (pos.y < c.maxY && pos.y + 1.8 > c.minY) {
         const pushLeft = (pos.x + radius) - c.minX;
         const pushRight = c.maxX - (pos.x - radius);
         const pushTop = (pos.z + radius) - c.minZ;
@@ -499,6 +659,7 @@ function checkAndResolveCollisions(pos, radius = 0.75) {
       }
     }
   }
+  return highestGroundY;
 }
 
 function getRandomSpawn() {
@@ -1226,7 +1387,11 @@ window.executeStartBattle = function(mode = 'FFA') {
       roomId: state.roomId,
       isPrivate: state.isPrivateRoom,
       mode: state.matchType,
-      name: state.myName
+      name: state.myName,
+      x: playerPos.x,
+      y: playerPos.y,
+      z: playerPos.z,
+      rotY: playerRotY
     }));
   }
 
@@ -1616,26 +1781,47 @@ function shoot() {
     }
   });
 
-  // 3. Remote Players (Private Room Mode)
+  // 3. Remote Players (Multiplayer Hit Registration)
   remotePlayers.forEach((rp, rId) => {
-    const box = new THREE.Box3().setFromObject(rp.group);
+    if (rp.isDead) return;
+    const px = rp.group.position.x;
+    const py = rp.group.position.y;
+    const pz = rp.group.position.z;
+    const box = new THREE.Box3(
+      new THREE.Vector3(px - 0.55, py, pz - 0.55),
+      new THREE.Vector3(px + 0.55, py + 1.95, pz + 0.55)
+    );
     const hitPoint = new THREE.Vector3();
     if (raycaster.ray.intersectBox(box, hitPoint)) {
       const targetDist = origin.distanceTo(hitPoint);
       if (targetDist < closestWallDist) {
         triggerHitmarker();
-        window.soundFX.playHit();
-        const hitRelY = hitPoint.y - rp.group.position.y;
-        const isHeadshot = hitRelY > 1.65;
-        const damage = isHeadshot ? 34 : (weapon.damage || 22);
+        if (window.soundFX && window.soundFX.playHit) window.soundFX.playHit();
+        const hitRelY = hitPoint.y - py;
+        const isHeadshot = hitRelY > 1.45;
+        const damage = isHeadshot ? (weapon.damage ? Math.round(weapon.damage * 1.5) : 38) : (weapon.damage || 24);
         showFloatingDamage(hitPoint, damage, isHeadshot);
+
+        // Flash remote player mesh red on hit
+        if (rp.group) {
+          rp.group.traverse(child => {
+            if (child.isMesh && child.material && child.material.color) {
+              const origHex = child.material.color.getHex();
+              child.material.color.setHex(0xff3333);
+              setTimeout(() => {
+                if (child.material && child.material.color) child.material.color.setHex(origHex);
+              }, 120);
+            }
+          });
+        }
 
         if (socket && socket.readyState === WebSocket.OPEN) {
           socket.send(JSON.stringify({
             type: 'player_hit',
             targetId: rId,
             damage: damage,
-            isHeadshot: isHeadshot
+            isHeadshot: isHeadshot,
+            gun: weapon.name
           }));
         }
       }
@@ -1917,23 +2103,25 @@ function gameLoop(time) {
       playerPos.x += move.x * speed * delta;
       playerPos.z += move.z * speed * delta;
 
-      // Solid obstacle collisions
-      checkAndResolveCollisions(playerPos, 0.75);
+      // Solid obstacle collisions and ground height
+      const groundY = checkAndResolveCollisions(playerPos, 0.75);
 
       playerPos.x = Math.max(-145, Math.min(145, playerPos.x));
       playerPos.z = Math.max(-145, Math.min(145, playerPos.z));
 
       if (keys.space && isGrounded) {
-        velocity.y = 8.5;
+        velocity.y = 9.2;
         isGrounded = false;
-        window.soundFX.playClickSound(t, 200, 450, 0.08, 0.2);
+        if (window.soundFX && window.soundFX.playJump) {
+          window.soundFX.playJump();
+        }
       }
 
-      velocity.y -= 22 * delta;
+      velocity.y -= 24 * delta;
       playerPos.y += velocity.y * delta;
 
-      if (playerPos.y <= 0) {
-        playerPos.y = 0;
+      if (playerPos.y <= groundY) {
+        playerPos.y = groundY;
         velocity.y = 0;
         isGrounded = true;
       }
@@ -1970,6 +2158,58 @@ function gameLoop(time) {
         }));
       }
     }
+
+    // Buttery Smooth 60fps Interpolation & Animation for Remote Players
+    remotePlayers.forEach((rp) => {
+      if (!rp.group) return;
+      if (rp.isDead) {
+        rp.group.visible = false;
+        return;
+      }
+      rp.group.visible = true;
+
+      const currentPos = rp.group.position;
+      const targetPos = rp.targetPos || currentPos;
+      const dist = currentPos.distanceTo(targetPos);
+
+      // Snap if teleported or respawned far away
+      if (dist > 15) {
+        currentPos.copy(targetPos);
+      } else {
+        currentPos.lerp(targetPos, Math.min(1, delta * 20));
+      }
+
+      // Smooth rotation Y
+      if (rp.targetRotY !== undefined) {
+        let diff = rp.targetRotY - rp.group.rotation.y;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        rp.group.rotation.y += diff * Math.min(1, delta * 20);
+      }
+
+      // Smooth head pitch
+      if (rp.head && rp.targetHeadPitch !== undefined) {
+        rp.head.rotation.x += (rp.targetHeadPitch - rp.head.rotation.x) * Math.min(1, delta * 15);
+      }
+
+      // Legs / arms walking & airborne animations
+      const horizDist = Math.hypot(targetPos.x - currentPos.x, targetPos.z - currentPos.z);
+      const isAirborne = currentPos.y > 0.4;
+
+      if (isAirborne) {
+        if (rp.leftLeg) rp.leftLeg.rotation.x = 0.45;
+        if (rp.rightLeg) rp.rightLeg.rotation.x = -0.45;
+      } else if (horizDist > 0.02 || dist > 0.05) {
+        rp.walkPhase = (rp.walkPhase || 0) + delta * 14;
+        if (rp.leftLeg) rp.leftLeg.rotation.x = Math.sin(rp.walkPhase) * 0.6;
+        if (rp.rightLeg) rp.rightLeg.rotation.x = -Math.sin(rp.walkPhase) * 0.6;
+        if (rp.leftArm) rp.leftArm.rotation.x = -Math.sin(rp.walkPhase) * 0.45;
+      } else {
+        if (rp.leftLeg) rp.leftLeg.rotation.x *= 0.85;
+        if (rp.rightLeg) rp.rightLeg.rotation.x *= 0.85;
+        if (rp.leftArm) rp.leftArm.rotation.x *= 0.85;
+      }
+    });
 
     // Reload Progress
     let reloadAnimY = 0;
