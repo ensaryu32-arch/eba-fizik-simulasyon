@@ -10,13 +10,13 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
 const PORT = process.env.PORT || 3000;
-const DATA_DIR = path.join(__dirname, 'data');
+const DATA_DIR = fs.existsSync(path.join(__dirname, 'data')) ? path.join(__dirname, 'data') : __dirname;
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const COUPONS_FILE = path.join(DATA_DIR, 'coupons.json');
 
-// Ensure data directory exists
+// Ensure data directory exists if used
 if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+  try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) {}
 }
 
 // Initial Database Files
@@ -999,7 +999,22 @@ app.post('/api/rooms/create', (req, res) => {
   });
 });
 
-app.use(express.static(path.join(__dirname, 'public')));
+const publicDir = fs.existsSync(path.join(__dirname, 'public')) ? path.join(__dirname, 'public') : __dirname;
+
+// Script rewrite helper: if requested /js/game.js and js folder does not exist, serve from root
+app.use((req, res, next) => {
+  if (req.url.startsWith('/js/')) {
+    const withoutJs = req.url.replace('/js/', '/');
+    const localCheck = path.join(__dirname, req.url);
+    if (!fs.existsSync(localCheck)) {
+      req.url = withoutJs;
+    }
+  }
+  next();
+});
+
+app.use(express.static(publicDir));
+app.use(express.static(__dirname));
 
 // ==========================================
 // WEBSOCKET MULTIPLAYER GAME SERVER
