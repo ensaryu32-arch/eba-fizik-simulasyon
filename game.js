@@ -364,8 +364,8 @@ function init() {
   // Setup Controls
   setupControls();
 
-  // Connect WebSocket
-  initWebSocket();
+  // Start Loop FIRST so 3D rendering is 100% guaranteed to start immediately!
+  requestAnimationFrame(gameLoop);
 
   // Match Timer
   setInterval(updateMatchTimer, 1000);
@@ -373,13 +373,26 @@ function init() {
   // Render Weapon Loadout Screen Grid
   renderWeaponLoadoutGrid();
 
-  // Start Loop
-  requestAnimationFrame(gameLoop);
+  // Connect WebSocket safely with offline/file fallback
+  try {
+    initWebSocket();
+  } catch (err) {
+    console.warn("WebSocket init error:", err);
+  }
 }
 
 function initWebSocket() {
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  socket = new WebSocket(`${protocol}//${window.location.host}`);
+  if (!window.location.host || window.location.protocol === 'file:') {
+    console.warn("WebSocket skipped (local file:// or static host). Offline mode active.");
+    return;
+  }
+  try {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    socket = new WebSocket(`${protocol}//${window.location.host}`);
+
+    socket.onerror = (err) => {
+      console.warn("WebSocket connection warning:", err);
+    };
 
   socket.onopen = () => {
     if (state.myName) {
@@ -678,6 +691,9 @@ function initWebSocket() {
 
     } catch (err) {}
   };
+  } catch (err) {
+    console.warn("WebSocket initialization exception:", err);
+  }
 }
 
 function createRemotePlayer(p) {
