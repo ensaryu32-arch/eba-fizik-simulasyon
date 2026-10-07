@@ -351,6 +351,137 @@ class SoundFX {
     osc.stop(t + 0.08);
   }
 
+  playBandage() {
+    if (!this.enabled) return;
+    this.init();
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    
+    // Rustle wrap noise + gentle healing chime
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(320, t);
+    osc.frequency.exponentialRampToValueAtTime(780, t + 0.35);
+    g.gain.setValueAtTime(0.28, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+    osc.connect(g);
+    g.connect(this.masterGain);
+    osc.start(t);
+    osc.stop(t + 0.35);
+  }
+
+  playCarHonk() {
+    if (!this.enabled) return;
+    this.init();
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+
+    // Dual-tone auto horn (440Hz + 550Hz)
+    const o1 = this.ctx.createOscillator();
+    const o2 = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    o1.type = 'sawtooth';
+    o2.type = 'sawtooth';
+    o1.frequency.setValueAtTime(435, t);
+    o2.frequency.setValueAtTime(548, t);
+    g.gain.setValueAtTime(0.35, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.38);
+
+    o1.connect(g);
+    o2.connect(g);
+    g.connect(this.masterGain);
+    o1.start(t); o2.start(t);
+    o1.stop(t + 0.38); o2.stop(t + 0.38);
+  }
+
+  playLootPickup() {
+    if (!this.enabled) return;
+    this.init();
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(520, t);
+    osc.frequency.exponentialRampToValueAtTime(1040, t + 0.12);
+    g.gain.setValueAtTime(0.3, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+    osc.connect(g);
+    g.connect(this.masterGain);
+    osc.start(t);
+    osc.stop(t + 0.12);
+  }
+
+  playSuppressedShot(sourcePos = null, listenerPos = null, listenerRotY = 0) {
+    if (!this.enabled) return;
+    this.init();
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+
+    let volume = 0.55;
+    let pan = 0.0;
+    if (sourcePos && listenerPos) {
+      const dx = sourcePos.x - listenerPos.x;
+      const dz = sourcePos.z - listenerPos.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist > 30) return; // Very tight stealth radius
+      volume = Math.max(0.04, Math.pow(1 - dist / 30, 2.0) * 0.4);
+      const angle = Math.atan2(dx, dz) - listenerRotY;
+      pan = Math.max(-1.0, Math.min(1.0, Math.sin(angle)));
+    }
+
+    const panner = this.ctx.createStereoPanner ? this.ctx.createStereoPanner() : null;
+    if (panner) panner.pan.setValueAtTime(pan, t);
+
+    // Muffled stealth sub-pop
+    const bufferSize = Math.floor(this.ctx.sampleRate * 0.07);
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (this.ctx.sampleRate * 0.012));
+    }
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = buffer;
+
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(1200, t);
+    filter.Q.setValueAtTime(2.5, t);
+
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(volume * 0.85, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.065);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    if (panner) {
+      gain.connect(panner);
+      panner.connect(this.masterGain);
+    } else {
+      gain.connect(this.masterGain);
+    }
+    noise.start(t);
+  }
+
+  playSilencerAttach() {
+    if (!this.enabled) return;
+    this.init();
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(420, t);
+    osc.frequency.exponentialRampToValueAtTime(840, t + 0.08);
+    g.gain.setValueAtTime(0.45, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.11);
+    osc.connect(g);
+    g.connect(this.masterGain);
+    osc.start(t);
+    osc.stop(t + 0.11);
+  }
+
   playClick() {
     if (!this.enabled) return;
     this.init();

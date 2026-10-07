@@ -1,5 +1,26 @@
 // Veck.io High-Definition 3D Models, Textures, Sci-Fi Arena, Authentic AK-47 & Tactical Two-Tone Pistol
 
+// Polyfill for older canvas contexts
+if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+    if (!r) r = 0;
+    if (typeof r === 'number') r = [r, r, r, r];
+    var tl = r[0] || 0, tr = r[1] || tl, br = r[2] || tl, bl = r[3] || tr;
+    this.beginPath();
+    this.moveTo(x + tl, y);
+    this.lineTo(x + w - tr, y);
+    this.quadraticCurveTo(x + w, y, x + w, y + tr);
+    this.lineTo(x + w, y + h - br);
+    this.quadraticCurveTo(x + w, y + h, x + w - br, y + h);
+    this.lineTo(x + bl, y + h);
+    this.quadraticCurveTo(x, y + h, x, y + h - bl);
+    this.lineTo(x, y + tl);
+    this.quadraticCurveTo(x, y, x + tl, y);
+    this.closePath();
+    return this;
+  };
+}
+
 // 1. PROCEDURAL HD TEXTURE GENERATORS
 function createAKWoodTexture() {
   const canvas = document.createElement('canvas');
@@ -560,6 +581,67 @@ const crateTex = createCrateTexture();
 const barrelTex = createBarrelTexture();
 const faceTex = createFaceTexture();
 
+// Realistic Muzzle Flash Procedural Texture & Cross-Plane Mesh (Eliminates ugly solid yellow polygon!)
+function createMuzzleFlashTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128; canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+
+  const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 62);
+  grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+  grad.addColorStop(0.25, 'rgba(255, 220, 100, 0.95)');
+  grad.addColorStop(0.55, 'rgba(255, 110, 20, 0.6)');
+  grad.addColorStop(0.85, 'rgba(255, 40, 0, 0.2)');
+  grad.addColorStop(1, 'rgba(255, 0, 0, 0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(64, 64, 62, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Multi-directional fiery flash sparks
+  ctx.fillStyle = 'rgba(255, 245, 200, 0.95)';
+  ctx.beginPath();
+  ctx.moveTo(64, 6);
+  ctx.lineTo(68, 58);
+  ctx.lineTo(122, 64);
+  ctx.lineTo(68, 70);
+  ctx.lineTo(64, 122);
+  ctx.lineTo(60, 70);
+  ctx.lineTo(6, 64);
+  ctx.lineTo(60, 58);
+  ctx.closePath();
+  ctx.fill();
+
+  return new THREE.CanvasTexture(canvas);
+}
+
+const realisticMuzzleFlashTex = createMuzzleFlashTexture();
+
+function createRealisticMuzzleFlashMesh(size = 0.32) {
+  const flashGroup = new THREE.Group();
+  flashGroup.visible = false;
+
+  const mat = new THREE.MeshBasicMaterial({
+    map: realisticMuzzleFlashTex,
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    side: THREE.DoubleSide
+  });
+
+  const p1 = new THREE.Mesh(new THREE.PlaneGeometry(size, size), mat);
+  const p2 = new THREE.Mesh(new THREE.PlaneGeometry(size, size), mat);
+  p2.rotation.y = Math.PI / 2;
+  const p3 = new THREE.Mesh(new THREE.PlaneGeometry(size * 0.85, size * 0.85), mat);
+  p3.rotation.z = Math.PI / 4;
+
+  flashGroup.add(p1, p2, p3);
+  flashGroup.mat = mat;
+  flashGroup.baseSize = size;
+  return flashGroup;
+}
+
 // Texture Shader Generator for Weapon Skins (Gold, Rainbow Cosmic, Crimson Vampire, Cyber Honeycomb, Orange SCAR)
 function createWeaponSkinMaterial(skinName = 'default', baseColor = 0x22262c) {
   if (!skinName || skinName === 'default') {
@@ -990,10 +1072,8 @@ function createAuthenticAK47Model(isViewmodel = false, skin = 'default') {
 
     root.add(leftArm, leftHand, rightArm, rightHand);
 
-    // Muzzle Flash
-    const flashGeom = new THREE.OctahedronGeometry(0.26, 0);
-    const flashMat = new THREE.MeshBasicMaterial({ color: 0xffea00, transparent: true, opacity: 0 });
-    const flash = new THREE.Mesh(flashGeom, flashMat);
+    // Realistic Muzzle Flash
+    const flash = createRealisticMuzzleFlashMesh(0.36);
     flash.position.set(0, 0.04, -1.35);
     root.add(flash);
     root.flash = flash;
@@ -1086,10 +1166,8 @@ function createTwoTonePistolModel(isViewmodel = false) {
 
     root.add(rightArm, rightHand, leftHand);
 
-    // Muzzle Flash
-    const flashGeom = new THREE.OctahedronGeometry(0.18, 0);
-    const flashMat = new THREE.MeshBasicMaterial({ color: 0xffea00, transparent: true, opacity: 0 });
-    const flash = new THREE.Mesh(flashGeom, flashMat);
+    // Realistic Muzzle Flash
+    const flash = createRealisticMuzzleFlashMesh(0.24);
     flash.position.set(0, 0.05, -0.45);
     root.add(flash);
     root.flash = flash;
@@ -1641,9 +1719,7 @@ function createPaintballGunModel(isViewmodel = false) {
   root.add(receiver, barrel, hopperFeed, hopper, grip, tank);
 
   if (isViewmodel) {
-    const flashGeom = new THREE.OctahedronGeometry(0.22, 0);
-    const flashMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0 });
-    const flash = new THREE.Mesh(flashGeom, flashMat);
+    const flash = createRealisticMuzzleFlashMesh(0.28);
     flash.position.set(0, 0.02, -0.9);
     root.add(flash);
     root.flash = flash;
@@ -1689,9 +1765,7 @@ function createMinigunModel(isViewmodel = false) {
   root.barrelGroup = barrelGroup;
 
   if (isViewmodel) {
-    const flashGeom = new THREE.OctahedronGeometry(0.35, 0);
-    const flashMat = new THREE.MeshBasicMaterial({ color: 0xffea00, transparent: true, opacity: 0 });
-    const flash = new THREE.Mesh(flashGeom, flashMat);
+    const flash = createRealisticMuzzleFlashMesh(0.42);
     flash.position.set(0, 0, -1.35);
     root.add(flash);
     root.flash = flash;
@@ -1734,9 +1808,7 @@ function createSniperModel(isViewmodel = false) {
   root.add(chassis, stock, longBarrel, muzzleBrake, scopeMount, scopeBody, scopeLensFront);
 
   if (isViewmodel) {
-    const flashGeom = new THREE.OctahedronGeometry(0.38, 0);
-    const flashMat = new THREE.MeshBasicMaterial({ color: 0xa855f7, transparent: true, opacity: 0 });
-    const flash = new THREE.Mesh(flashGeom, flashMat);
+    const flash = createRealisticMuzzleFlashMesh(0.45);
     flash.position.set(0, 0.04, -1.85);
     root.add(flash);
     root.flash = flash;
@@ -1774,9 +1846,7 @@ function createRocketLauncherModel(isViewmodel = false) {
   root.add(tube, heatShield, warheadCone, warheadBase);
 
   if (isViewmodel) {
-    const flashGeom = new THREE.OctahedronGeometry(0.45, 0);
-    const flashMat = new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 0 });
-    const flash = new THREE.Mesh(flashGeom, flashMat);
+    const flash = createRealisticMuzzleFlashMesh(0.55);
     flash.position.set(0, 0, -1.2);
     root.add(flash);
     root.flash = flash;
@@ -2369,35 +2439,449 @@ function createCyberCityMap() {
   return { group: city, jumpPads: jumpPads, colliders: colliders, obeliskBeacon: obeliskBeacon };
 }
 
-// 8. 3D LOBBY ENVIRONMENT
+// 8. 3D LOBBY ENVIRONMENT (AUTHENTIC VECK.IO SCI-FI HANGAR & PEDESTALS)
+function createRuneCircleTexture(color1 = '#00f0ff', color2 = '#3b82f6') {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512; canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+  const cx = 256, cy = 256;
+
+  if (ctx.clearRect) ctx.clearRect(0, 0, 512, 512);
+
+  // Outer glowing ring
+  ctx.strokeStyle = color1;
+  ctx.lineWidth = 10;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 230, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Tick marks
+  ctx.lineWidth = 4;
+  for (let i = 0; i < 36; i++) {
+    const angle = (i / 36) * Math.PI * 2;
+    const r1 = i % 3 === 0 ? 210 : 220;
+    const r2 = 230;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(angle) * r1, cy + Math.sin(angle) * r1);
+    ctx.lineTo(cx + Math.cos(angle) * r2, cy + Math.sin(angle) * r2);
+    ctx.stroke();
+  }
+
+  // Middle ring
+  ctx.strokeStyle = color2;
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 180, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Inner arcane geometric star (8 points)
+  ctx.strokeStyle = color1;
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  for (let i = 0; i <= 8; i++) {
+    const angle = (i / 8) * Math.PI * 2;
+    const r = i % 2 === 0 ? 150 : 75;
+    const px = cx + Math.cos(angle) * r;
+    const py = cy + Math.sin(angle) * r;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.stroke();
+
+  // Center core glowing circle
+  ctx.fillStyle = color1;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 32, 0, Math.PI * 2);
+  ctx.fill();
+
+  const tex = new THREE.CanvasTexture(canvas);
+  return tex;
+}
+
+function createLobbyHangarSignTexture(title, subtitle, rooms, accentColor = '#00f0ff') {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512; canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+
+  // Background
+  ctx.fillStyle = '#0a0f1d';
+  ctx.fillRect(0, 0, 512, 256);
+
+  // Border
+  ctx.strokeStyle = accentColor;
+  ctx.lineWidth = 8;
+  ctx.strokeRect(4, 4, 504, 248);
+
+  // Header Banner
+  ctx.fillStyle = accentColor;
+  ctx.fillRect(8, 8, 496, 52);
+
+  ctx.fillStyle = '#050811';
+  ctx.font = '900 28px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(title, 24, 44);
+
+  ctx.textAlign = 'right';
+  ctx.font = '700 18px sans-serif';
+  ctx.fillText(subtitle, 488, 42);
+
+  // Match rows
+  rooms.forEach((r, idx) => {
+    const y = 96 + idx * 46;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
+    ctx.fillRect(20, y - 26, 472, 38);
+
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = 'bold 20px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(r.name, 32, y);
+
+    ctx.fillStyle = '#ffd700';
+    ctx.font = 'bold 18px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(r.count, 330, y);
+
+    ctx.fillStyle = '#22c55e';
+    ctx.fillRect(400, y - 18, 76, 26);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '900 14px sans-serif';
+    ctx.fillText('JOIN', 438, y);
+  });
+
+  const tex = new THREE.CanvasTexture(canvas);
+  return tex;
+}
+
+function createLobbyPedestalBillboard(text, icon = '⚡', color = '#00f0ff') {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256; canvas.height = 96;
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = 'rgba(10, 15, 28, 0.88)';
+  if (ctx.roundRect) ctx.roundRect(8, 8, 240, 80, 16);
+  else ctx.fillRect(8, 8, 240, 80);
+  ctx.fill();
+
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 4;
+  if (ctx.roundRect) ctx.roundRect(8, 8, 240, 80, 16);
+  else ctx.strokeRect(8, 8, 240, 80);
+  ctx.stroke();
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '900 24px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`${icon} ${text}`, 128, 48);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.4, 0.9),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide })
+  );
+  return mesh;
+}
+
 function createLobbyEnvironment() {
   const lobby = new THREE.Group();
-  const floor = new THREE.Mesh(
-    new THREE.CylinderGeometry(32, 32, 0.6, 64),
-    new THREE.MeshStandardMaterial({ map: hdFloorTex, roughness: 0.35, metalness: 0.1 })
-  );
-  floor.position.y = -0.3;
-  lobby.add(floor);
+  lobby.userData = {
+    pedestalWeapons: [],
+    runes: [],
+    ambientBots: [],
+    particles: []
+  };
 
-  const centerPad = new THREE.Mesh(
-    new THREE.RingGeometry(2.4, 3.8, 64),
-    new THREE.MeshBasicMaterial({ color: 0xffd700, side: THREE.DoubleSide })
-  );
-  centerPad.rotation.x = -Math.PI / 2;
-  centerPad.position.y = 0.02;
-  lobby.add(centerPad);
+  // 1. Main Hangar Runway Floor
+  const floorGeom = new THREE.PlaneGeometry(18, 70);
+  const floorMat = new THREE.MeshStandardMaterial({
+    map: hdFloorTex,
+    roughness: 0.35,
+    metalness: 0.2
+  });
+  const mainFloor = new THREE.Mesh(floorGeom, floorMat);
+  mainFloor.rotation.x = -Math.PI / 2;
+  mainFloor.position.set(0, -0.05, -20);
+  mainFloor.receiveShadow = true;
+  lobby.add(mainFloor);
 
-  for (let i = 0; i < 10; i++) {
-    const angle = (i / 10) * Math.PI * 2;
-    const px = Math.cos(angle) * 28;
-    const pz = Math.sin(angle) * 28;
-    const col = new THREE.Mesh(
-      new THREE.CylinderGeometry(1.0, 1.2, 22, 24),
-      new THREE.MeshStandardMaterial({ color: 0x1f2438, roughness: 0.4 })
+  // Outer Extended Floor Borders
+  const outerFloorMat = new THREE.MeshStandardMaterial({ color: 0x090d16, roughness: 0.6 });
+  const leftOuterFloor = new THREE.Mesh(new THREE.PlaneGeometry(20, 70), outerFloorMat);
+  leftOuterFloor.rotation.x = -Math.PI / 2;
+  leftOuterFloor.position.set(-19, -0.06, -20);
+  const rightOuterFloor = new THREE.Mesh(new THREE.PlaneGeometry(20, 70), outerFloorMat);
+  rightOuterFloor.rotation.x = -Math.PI / 2;
+  rightOuterFloor.position.set(19, -0.06, -20);
+  lobby.add(leftOuterFloor, rightOuterFloor);
+
+  // 2. Dual Glowing Neon Floor Runway Tracks (Matching Veck.io Reference)
+  // Left: Vibrant Gold/Yellow Track
+  const yellowStripe = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.35, 64),
+    new THREE.MeshBasicMaterial({ color: 0xffd700 })
+  );
+  yellowStripe.rotation.x = -Math.PI / 2;
+  yellowStripe.position.set(-2.0, 0.01, -22);
+  lobby.add(yellowStripe);
+
+  // Right: Vibrant Neon Cyan Track
+  const cyanStripe = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.35, 64),
+    new THREE.MeshBasicMaterial({ color: 0x00f0ff })
+  );
+  cyanStripe.rotation.x = -Math.PI / 2;
+  cyanStripe.position.set(2.0, 0.01, -22);
+  lobby.add(cyanStripe);
+
+  // Center glowing runway chevrons
+  for (let z = 2; z >= -48; z -= 6) {
+    const arrow = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.8, 0.2),
+      new THREE.MeshBasicMaterial({ color: 0x38bdf8, opacity: 0.7, transparent: true })
     );
-    col.position.set(px, 11, pz);
-    lobby.add(col);
+    arrow.rotation.x = -Math.PI / 2;
+    arrow.position.set(0, 0.015, z);
+    lobby.add(arrow);
   }
+
+  // 3. Center Player Podium
+  const centerBase = new THREE.Mesh(
+    new THREE.CylinderGeometry(3.2, 3.4, 0.35, 48),
+    new THREE.MeshStandardMaterial({ color: 0x161b26, roughness: 0.3, metalness: 0.5 })
+  );
+  centerBase.position.set(0, 0.12, 0);
+  centerBase.receiveShadow = true;
+  lobby.add(centerBase);
+
+  // Glowing Purple Edge Ring
+  const centerEdgeRing = new THREE.Mesh(
+    new THREE.RingGeometry(3.0, 3.35, 48),
+    new THREE.MeshBasicMaterial({ color: 0xd946ef, side: THREE.DoubleSide })
+  );
+  centerEdgeRing.rotation.x = -Math.PI / 2;
+  centerEdgeRing.position.set(0, 0.31, 0);
+  lobby.add(centerEdgeRing);
+
+  // Center Arcane Energy Rune Pad
+  const centerRuneTex = createRuneCircleTexture('#d946ef', '#00f0ff');
+  const centerRune = new THREE.Mesh(
+    new THREE.PlaneGeometry(5.6, 5.6),
+    new THREE.MeshBasicMaterial({ map: centerRuneTex, transparent: true, side: THREE.DoubleSide })
+  );
+  centerRune.rotation.x = -Math.PI / 2;
+  centerRune.position.set(0, 0.32, 0);
+  lobby.add(centerRune);
+  lobby.userData.runes.push({ mesh: centerRune, speed: 0.25 });
+
+  // 4. Left "Quick TDM" Pedestal (Golden AK-47 & Blue Rune Circle)
+  const tdmBase = new THREE.Mesh(
+    new THREE.CylinderGeometry(2.0, 2.2, 0.28, 36),
+    new THREE.MeshStandardMaterial({ color: 0x131a2a, roughness: 0.35, metalness: 0.4 })
+  );
+  tdmBase.position.set(-5.0, 0.1, -2.4);
+  lobby.add(tdmBase);
+
+  const tdmRuneTex = createRuneCircleTexture('#00f0ff', '#3b82f6');
+  const tdmRune = new THREE.Mesh(
+    new THREE.PlaneGeometry(3.6, 3.6),
+    new THREE.MeshBasicMaterial({ map: tdmRuneTex, transparent: true, side: THREE.DoubleSide })
+  );
+  tdmRune.rotation.x = -Math.PI / 2;
+  tdmRune.position.set(-5.0, 0.25, -2.4);
+  lobby.add(tdmRune);
+  lobby.userData.runes.push({ mesh: tdmRune, speed: -0.35 });
+
+  // Floating Golden AK-47 Model on Left Pedestal
+  const tdmGun = createAuthenticAK47Model(false, 'gold');
+  tdmGun.scale.set(1.5, 1.5, 1.5);
+  tdmGun.position.set(-5.0, 1.35, -2.4);
+  tdmGun.rotation.set(0.15, 0.4, -0.1);
+  tdmGun.userData = { baseY: 1.35, phase: 0 };
+  lobby.add(tdmGun);
+  lobby.userData.pedestalWeapons.push(tdmGun);
+
+  // 3D Billboard above Left Pedestal
+  const tdmSign = createLobbyPedestalBillboard('Quick TDM', '⚡', '#00f0ff');
+  tdmSign.position.set(-5.0, 2.25, -2.4);
+  lobby.add(tdmSign);
+
+  // 5. Right "Quick Arcade" Pedestal (Cyan Minigun & Neon Rune Circle)
+  const arcadeBase = new THREE.Mesh(
+    new THREE.CylinderGeometry(2.0, 2.2, 0.28, 36),
+    new THREE.MeshStandardMaterial({ color: 0x131a2a, roughness: 0.35, metalness: 0.4 })
+  );
+  arcadeBase.position.set(5.0, 0.1, -2.4);
+  lobby.add(arcadeBase);
+
+  const arcadeRuneTex = createRuneCircleTexture('#10b981', '#06b6d4');
+  const arcadeRune = new THREE.Mesh(
+    new THREE.PlaneGeometry(3.6, 3.6),
+    new THREE.MeshBasicMaterial({ map: arcadeRuneTex, transparent: true, side: THREE.DoubleSide })
+  );
+  arcadeRune.rotation.x = -Math.PI / 2;
+  arcadeRune.position.set(5.0, 0.25, -2.4);
+  lobby.add(arcadeRune);
+  lobby.userData.runes.push({ mesh: arcadeRune, speed: 0.35 });
+
+  // Floating Minigun / Submachine Gun on Right Pedestal
+  const arcadeGun = createMinigunModel(false, 'neon');
+  arcadeGun.scale.set(1.2, 1.2, 1.2);
+  arcadeGun.position.set(5.0, 1.35, -2.4);
+  arcadeGun.rotation.set(0.15, -0.4, 0.1);
+  arcadeGun.userData = { baseY: 1.35, phase: Math.PI };
+  lobby.add(arcadeGun);
+  lobby.userData.pedestalWeapons.push(arcadeGun);
+
+  // 3D Billboard above Right Pedestal
+  const arcadeSign = createLobbyPedestalBillboard('Quick Arcade', '🎮', '#10b981');
+  arcadeSign.position.set(5.0, 2.25, -2.4);
+  lobby.add(arcadeSign);
+
+  // 6. Sci-Fi Hangar Pillars & Overhead Truss Beams
+  const pillarZ = [4, -4, -12, -20, -28, -36, -44];
+  const pillarMat = new THREE.MeshStandardMaterial({ color: 0x181f2e, roughness: 0.4, metalness: 0.6 });
+  const neonMatCyan = new THREE.MeshBasicMaterial({ color: 0x00f0ff });
+  const neonMatAmber = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
+
+  pillarZ.forEach((pz, idx) => {
+    [-8.0, 8.0].forEach(px => {
+      // Main Pillar Column
+      const col = new THREE.Mesh(new THREE.BoxGeometry(1.4, 14, 1.4), pillarMat);
+      col.position.set(px, 7, pz);
+      lobby.add(col);
+
+      // Vertical LED Neon Strip
+      const led = new THREE.Mesh(
+        new THREE.BoxGeometry(0.12, 13, 0.12),
+        idx % 2 === 0 ? neonMatCyan : neonMatAmber
+      );
+      led.position.set(px + (px > 0 ? -0.72 : 0.72), 7, pz);
+      lobby.add(led);
+    });
+
+    // Overhead Structural Cross-Truss Beam
+    const crossBeam = new THREE.Mesh(
+      new THREE.BoxGeometry(17.4, 0.8, 0.8),
+      new THREE.MeshStandardMaterial({ color: 0x0f1522, roughness: 0.5 })
+    );
+    crossBeam.position.set(0, 13.6, pz);
+    lobby.add(crossBeam);
+  });
+
+  // 7. Giant Hanging Digital Match Screens / Billboards
+  const leftScreenTex = createLobbyHangarSignTexture('VECK.IO TDM', '7/8 PLAYERS', [
+    { name: 'Block Arena (TDM)', count: '7/8' },
+    { name: 'Vertigo (FFA)', count: '5/8' },
+    { name: 'Cyber City (TDM)', count: '8/8' }
+  ], '#0284c7');
+  const leftScreen = new THREE.Mesh(
+    new THREE.PlaneGeometry(8, 4),
+    new THREE.MeshBasicMaterial({ map: leftScreenTex, side: THREE.DoubleSide })
+  );
+  leftScreen.position.set(-7.2, 6.2, -10);
+  leftScreen.rotation.y = Math.PI / 7;
+  lobby.add(leftScreen);
+
+  const rightScreenTex = createLobbyHangarSignTexture('BATTLEFIELD', '6/8 PLAYERS', [
+    { name: 'Gun Game Arena', count: '6/8' },
+    { name: 'PUBG Survival 4x4', count: '14/20' },
+    { name: 'Sniper Only FFA', count: '4/8' }
+  ], '#f59e0b');
+  const rightScreen = new THREE.Mesh(
+    new THREE.PlaneGeometry(8, 4),
+    new THREE.MeshBasicMaterial({ map: rightScreenTex, side: THREE.DoubleSide })
+  );
+  rightScreen.position.set(7.2, 6.2, -10);
+  rightScreen.rotation.y = -Math.PI / 7;
+  lobby.add(rightScreen);
+
+  // 8. Rear Hallway Gateway Arch (Deep Hangar Portal)
+  const portalArch = new THREE.Mesh(
+    new THREE.BoxGeometry(12, 11, 1),
+    new THREE.MeshStandardMaterial({ color: 0x0b101c, roughness: 0.4 })
+  );
+  portalArch.position.set(0, 5.5, -48);
+  lobby.add(portalArch);
+
+  const portalHole = new THREE.Mesh(
+    new THREE.PlaneGeometry(8, 8),
+    new THREE.MeshBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.28 })
+  );
+  portalHole.position.set(0, 4.2, -47.4);
+  lobby.add(portalHole);
+
+  // 9. Ambient Lobby Characters (Other Players Standing/Idling in Hallway)
+  const bot1 = createBlockyCharacter({
+    name: 'VeckWarrior17',
+    level: 7,
+    teamColor: 'blue',
+    shirtColor: 0x3b82f6,
+    pantsColor: 0x18181b,
+    weaponType: 'ak47',
+    isEnemy: false
+  });
+  bot1.group.position.set(-1.8, 0, -9.5);
+  bot1.group.rotation.y = 0.25;
+  lobby.add(bot1.group);
+  lobby.userData.ambientBots.push(bot1);
+
+  const bot2 = createBlockyCharacter({
+    name: 'anderson23',
+    level: 4,
+    teamColor: 'blue',
+    shirtColor: 0x8b5cf6,
+    pantsColor: 0x1e293b,
+    weaponType: 'pistol',
+    isEnemy: false
+  });
+  bot2.group.position.set(1.9, 0, -16);
+  bot2.group.rotation.y = -0.35;
+  lobby.add(bot2.group);
+  lobby.userData.ambientBots.push(bot2);
+
+  const bot3 = createBlockyCharacter({
+    name: 'VeckWinner76',
+    level: 9,
+    teamColor: 'red',
+    shirtColor: 0xef4444,
+    pantsColor: 0x0f172a,
+    weaponType: 'ak47',
+    isEnemy: false
+  });
+  bot3.group.position.set(-1.4, 0, -24);
+  bot3.group.rotation.y = 0.15;
+  lobby.add(bot3.group);
+  lobby.userData.ambientBots.push(bot3);
+
+  // 10. Floating Ambient Energy Particles
+  const pGeom = new THREE.BoxGeometry(0.08, 0.08, 0.08);
+  const pMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.65 });
+  for (let i = 0; i < 30; i++) {
+    const p = new THREE.Mesh(pGeom, pMat);
+    p.position.set(
+      (Math.random() - 0.5) * 14,
+      0.5 + Math.random() * 4.5,
+      (Math.random() - 0.5) * 36 - 8
+    );
+    p.userData = {
+      baseY: p.position.y,
+      speed: 0.5 + Math.random() * 0.8,
+      phase: Math.random() * Math.PI * 2
+    };
+    lobby.add(p);
+    lobby.userData.particles.push(p);
+  }
+
+  // 11. Atmospheric Lighting for Lobby
+  const lobbyKeyLight = new THREE.PointLight(0x00f0ff, 1.4, 16);
+  lobbyKeyLight.position.set(0, 4.5, 1.5);
+  lobby.add(lobbyKeyLight);
+
+  const lobbyFillLight = new THREE.PointLight(0xffb703, 0.9, 14);
+  lobbyFillLight.position.set(0, 3.8, -6);
+  lobby.add(lobbyFillLight);
+
   return lobby;
 }
 
@@ -2463,9 +2947,7 @@ function createAssaultRifleModel(isViewmodel = false, skin = 'default') {
   root.mag = mag;
 
   if (isViewmodel) {
-    const flashGeom = new THREE.OctahedronGeometry(0.28, 0);
-    const flashMat = new THREE.MeshBasicMaterial({ color: 0xffea00, transparent: true, opacity: 0 });
-    const flash = new THREE.Mesh(flashGeom, flashMat);
+    const flash = createRealisticMuzzleFlashMesh(0.36);
     flash.position.set(0, 0.04, -1.1);
     root.add(flash);
     root.flash = flash;
@@ -2501,9 +2983,7 @@ function createBurstRifleModel(isViewmodel = false, skin = 'default') {
   root.add(body, handleTop, grip, rearMag, barrel);
 
   if (isViewmodel) {
-    const flashGeom = new THREE.OctahedronGeometry(0.26, 0);
-    const flashMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0 });
-    const flash = new THREE.Mesh(flashGeom, flashMat);
+    const flash = createRealisticMuzzleFlashMesh(0.32);
     flash.position.set(0, 0.02, -0.95);
     root.add(flash);
     root.flash = flash;
@@ -2539,9 +3019,7 @@ function createShawtyModel(isViewmodel = false, skin = 'default') {
   root.add(receiver, grip, barrelLeft, barrelRight, forend);
 
   if (isViewmodel) {
-    const flashGeom = new THREE.OctahedronGeometry(0.35, 0);
-    const flashMat = new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0 });
-    const flash = new THREE.Mesh(flashGeom, flashMat);
+    const flash = createRealisticMuzzleFlashMesh(0.42);
     flash.position.set(0, 0.03, -0.8);
     root.add(flash);
     root.flash = flash;
@@ -2787,8 +3265,1172 @@ function createKarambitModel(isViewmodel = false, skin = 'default') {
   return root;
 }
 
-// EXPORT ALL 3D MODELS GLOBALLY
+// ==========================================
+// 9. REALISTIC PROCEDURAL TERRAIN TEXTURES (PUBG STYLE)
+// ==========================================
+function createPubgGrassTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256; canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = '#4a6736';
+  ctx.fillRect(0, 0, 256, 256);
+
+  // Natural grass tufts & soil variation
+  for (let i = 0; i < 4000; i++) {
+    const rx = Math.random() * 256;
+    const ry = Math.random() * 256;
+    const rShade = Math.random();
+    if (rShade < 0.35) ctx.fillStyle = '#3c542b';
+    else if (rShade < 0.7) ctx.fillStyle = '#5c7d42';
+    else if (rShade < 0.9) ctx.fillStyle = '#423d24';
+    else ctx.fillStyle = '#688c49';
+    ctx.fillRect(rx, ry, Math.random() * 3 + 1, Math.random() * 4 + 1);
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(40, 40);
+  return tex;
+}
+
+function createPubgRoadTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256; canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+
+  // Dark asphalt base
+  ctx.fillStyle = '#27272a';
+  ctx.fillRect(0, 0, 256, 256);
+
+  // Asphalt gravel noise
+  for (let i = 0; i < 3000; i++) {
+    const rx = Math.random() * 256;
+    const ry = Math.random() * 256;
+    ctx.fillStyle = Math.random() < 0.5 ? '#1f1f23' : '#333338';
+    ctx.fillRect(rx, ry, 2, 2);
+  }
+
+  // Yellow dashed road stripes in center
+  ctx.fillStyle = '#facc15';
+  ctx.fillRect(122, 20, 12, 60);
+  ctx.fillRect(122, 140, 12, 60);
+
+  // White edge lines
+  ctx.fillStyle = '#e2e8f0';
+  ctx.fillRect(8, 0, 8, 256);
+  ctx.fillRect(240, 0, 8, 256);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(1, 35);
+  return tex;
+}
+
+const pubgGrassTex = createPubgGrassTexture();
+const pubgRoadTex = createPubgRoadTexture();
+
+// ==========================================
+// 10. DRIVABLE PUBG UAZ / JEEP VEHICLE
+// ==========================================
+function createPubgJeepVehicle(startX = 0, startZ = 0, startAngle = 0) {
+  const jeepGroup = new THREE.Group();
+
+  const armyGreenMat = new THREE.MeshStandardMaterial({ color: 0x3d4f27, roughness: 0.7, metalness: 0.25 });
+  const darkMetalMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.45, metalness: 0.8 });
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x93c5fd, transparent: true, opacity: 0.4, roughness: 0.1, metalness: 0.9 });
+  const tireMat = new THREE.MeshStandardMaterial({ color: 0x1c1917, roughness: 0.9, metalness: 0.1 });
+  const rimMat = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.35, metalness: 0.7 });
+  const lightGlowMat = new THREE.MeshBasicMaterial({ color: 0xfffbeb });
+  const tailGlowMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+
+  // 1. Lower Chassis
+  const chassis = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.7, 6.8), darkMetalMat);
+  chassis.position.y = 0.85;
+  chassis.castShadow = true;
+  jeepGroup.add(chassis);
+
+  // 2. Main Body Tub
+  const body = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.9, 6.6), armyGreenMat);
+  body.position.y = 1.45;
+  body.castShadow = true;
+  jeepGroup.add(body);
+
+  // 3. Engine Hood
+  const hood = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.75, 2.5), armyGreenMat);
+  hood.position.set(0, 1.95, -1.95);
+  hood.castShadow = true;
+  jeepGroup.add(hood);
+
+  // 4. Front Radiator Grill (iconic vertical slits)
+  const grill = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.65, 0.15), darkMetalMat);
+  grill.position.set(0, 1.95, -3.22);
+  jeepGroup.add(grill);
+
+  // 5. Bumpers
+  const frontBumper = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.4, 0.4), darkMetalMat);
+  frontBumper.position.set(0, 0.8, -3.4);
+  const winch = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.8, 12), darkMetalMat);
+  winch.rotation.z = Math.PI / 2;
+  winch.position.set(0, 0.8, -3.65);
+  jeepGroup.add(frontBumper, winch);
+
+  const rearBumper = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.4, 0.4), darkMetalMat);
+  rearBumper.position.set(0, 0.8, 3.4);
+  jeepGroup.add(rearBumper);
+
+  // 6. Glowing Headlights & Taillights
+  const hlLeft = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.15, 16), lightGlowMat);
+  hlLeft.rotation.x = Math.PI / 2;
+  hlLeft.position.set(-1.15, 1.95, -3.23);
+  const hlRight = hlLeft.clone();
+  hlRight.position.x = 1.15;
+  jeepGroup.add(hlLeft, hlRight);
+
+  const tlLeft = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.12), tailGlowMat);
+  tlLeft.position.set(-1.3, 1.6, 3.32);
+  const tlRight = tlLeft.clone();
+  tlRight.position.x = 1.3;
+  jeepGroup.add(tlLeft, tlRight);
+
+  // 7. Windshield Frame & Tinted Glass
+  const windshieldFrame = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.25, 0.15), armyGreenMat);
+  windshieldFrame.position.set(0, 2.7, -0.65);
+  windshieldFrame.rotation.x = 0.22;
+  const windshieldGlass = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.95, 0.08), glassMat);
+  windshieldGlass.position.set(0, 2.7, -0.64);
+  windshieldGlass.rotation.x = 0.22;
+  jeepGroup.add(windshieldFrame, windshieldGlass);
+
+  // 8. Roll Cage & Roof Top
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.2, 3.6), armyGreenMat);
+  roof.position.set(0, 3.35, 1.15);
+  roof.castShadow = true;
+  jeepGroup.add(roof);
+
+  const makePillar = (px, pz) => {
+    const p = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.5, 8), darkMetalMat);
+    p.position.set(px, 2.6, pz);
+    jeepGroup.add(p);
+  };
+  makePillar(-1.5, -0.6);
+  makePillar(1.5, -0.6);
+  makePillar(-1.5, 1.2);
+  makePillar(1.5, 1.2);
+  makePillar(-1.5, 2.8);
+  makePillar(1.5, 2.8);
+
+  // 9. Cabin Interior (Seats & Steering Wheel)
+  const seatMat = new THREE.MeshStandardMaterial({ color: 0x292524, roughness: 0.9 });
+  const seatDriver = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.1, 1.1), seatMat);
+  seatDriver.position.set(-0.75, 1.8, 0.3);
+  const seatPass = seatDriver.clone();
+  seatPass.position.x = 0.75;
+  const steerWheel = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.045, 8, 16), darkMetalMat);
+  steerWheel.position.set(-0.75, 2.3, -0.4);
+  steerWheel.rotation.x = 0.45;
+  jeepGroup.add(seatDriver, seatPass, steerWheel);
+
+  // 10. Spare Tire on Tailgate
+  const spareWheel = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 0.5, 16), tireMat);
+  spareWheel.position.set(0, 1.9, 3.55);
+  spareWheel.rotation.x = Math.PI / 2;
+  jeepGroup.add(spareWheel);
+
+  // 11. 4 Thick Off-Road Wheels with Steerable Front Pivots
+  function createWheelMesh() {
+    const wGroup = new THREE.Group();
+    const tire = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 0.65, 18), tireMat);
+    tire.rotation.z = Math.PI / 2;
+    tire.castShadow = true;
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.48, 0.68, 12), rimMat);
+    rim.rotation.z = Math.PI / 2;
+    wGroup.add(tire, rim);
+    return { group: wGroup, tire: tire };
+  }
+
+  // Front-Left with steering pivot
+  const flPivot = new THREE.Group();
+  flPivot.position.set(-1.85, 0.75, -2.0);
+  const flWheel = createWheelMesh();
+  flPivot.add(flWheel.group);
+  jeepGroup.add(flPivot);
+
+  // Front-Right with steering pivot
+  const frPivot = new THREE.Group();
+  frPivot.position.set(1.85, 0.75, -2.0);
+  const frWheel = createWheelMesh();
+  frPivot.add(frWheel.group);
+  jeepGroup.add(frPivot);
+
+  // Rear Wheels
+  const rlWheel = createWheelMesh();
+  rlWheel.group.position.set(-1.85, 0.75, 2.0);
+  jeepGroup.add(rlWheel.group);
+
+  const rrWheel = createWheelMesh();
+  rrWheel.group.position.set(1.85, 0.75, 2.0);
+  jeepGroup.add(rrWheel.group);
+
+  jeepGroup.position.set(startX, 0, startZ);
+  jeepGroup.rotation.y = startAngle;
+
+  return {
+    group: jeepGroup,
+    wheels: {
+      flPivot: flPivot,
+      frPivot: frPivot,
+      flTire: flWheel.tire,
+      frTire: frWheel.tire,
+      rlTire: rlWheel.tire,
+      rrTire: rrWheel.tire
+    },
+    pos: new THREE.Vector3(startX, 0, startZ),
+    vel: new THREE.Vector3(0, 0, 0),
+    speed: 0,
+    angle: startAngle,
+    steerAngle: 0,
+    isDriven: false,
+    maxSpeed: 82,
+    reverseMax: -26,
+    accel: 38,
+    brakeDecel: 52,
+    friction: 0.985,
+    turnSpeed: 2.3
+  };
+}
+
+// ==========================================
+// 11. GIANT PUBG SURVIVAL MAP (ENTERABLE HOUSES, WAREHOUSE, TOWERS & LOOT)
+// ==========================================
+// Silencer / Suppressor 3D Tactical Mesh
+function createSilencerModel() {
+  const group = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x111317, roughness: 0.35, metalness: 0.85 });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.32, 16), mat);
+  body.rotation.x = Math.PI / 2;
+  const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.045, 0.04, 16), new THREE.MeshStandardMaterial({ color: 0x27272a, roughness: 0.5 }));
+  tip.rotation.x = Math.PI / 2;
+  tip.position.z = 0.18;
+  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.06, 16), new THREE.MeshStandardMaterial({ color: 0x09090b, roughness: 0.6 }));
+  collar.rotation.x = Math.PI / 2;
+  collar.position.z = -0.16;
+  group.add(body, tip, collar);
+  return group;
+}
+
+// ==========================================
+// 11. GIANT 1400-METER PUBG SURVIVAL MAP (POCHINKI, MILITARY, FARM, BRIDGE, RNG LOOT & SILENCERS)
+// ==========================================
+
+function createDeathCrateModel() {
+  const g = new THREE.Group();
+  const crateMat = new THREE.MeshStandardMaterial({ color: 0x1e3a2f, roughness: 0.6, metalness: 0.3 });
+  const strapMat = new THREE.MeshStandardMaterial({ color: 0xb45309, roughness: 0.8 });
+  const box = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.7, 0.9), crateMat);
+  box.position.y = 0.35;
+  box.castShadow = true;
+  g.add(box);
+
+  const strap1 = new THREE.Mesh(new THREE.BoxGeometry(1.32, 0.72, 0.16), strapMat);
+  strap1.position.set(0, 0.35, -0.22);
+  const strap2 = new THREE.Mesh(new THREE.BoxGeometry(1.32, 0.72, 0.16), strapMat);
+  strap2.position.set(0, 0.35, 0.22);
+  g.add(strap1, strap2);
+
+  // Tactical beacon / glow ring on ground
+  const ringGeom = new THREE.RingGeometry(0.8, 1.2, 16);
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, side: THREE.DoubleSide, transparent: true, opacity: 0.75 });
+  const ring = new THREE.Mesh(ringGeom, ringMat);
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.04;
+  g.add(ring);
+  g.lootRing = ring;
+
+  return g;
+}
+
+
+// 10.5 MILITARY CARGO TRANSPORT PLANE & PARACHUTE MODELS (PUBG AIR DROP)
+function createMilitaryCargoPlane() {
+  const g = new THREE.Group();
+  const planeMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.5, metalness: 0.4 });
+  const wingMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5, metalness: 0.4 });
+  const engineMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.3, metalness: 0.6 });
+  const propMat = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
+
+  // Fuselage (Body)
+  const body = new THREE.Mesh(new THREE.BoxGeometry(7, 6.5, 38), planeMat);
+  body.castShadow = true;
+  g.add(body);
+
+  // Cockpit Nose (Tapered)
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(4.2, 8, 4), planeMat);
+  nose.rotation.x = -Math.PI / 2;
+  nose.rotation.y = Math.PI / 4;
+  nose.position.set(0, 0, 23);
+  g.add(nose);
+
+  // Wings (Giant Main Wingspan: 48m)
+  const wings = new THREE.Mesh(new THREE.BoxGeometry(48, 0.6, 7), wingMat);
+  wings.position.set(0, 2.5, 2);
+  wings.castShadow = true;
+  g.add(wings);
+
+  // Tail Vertical Fin & Rudder
+  const vFin = new THREE.Mesh(new THREE.BoxGeometry(0.8, 9, 7), wingMat);
+  vFin.position.set(0, 7.5, -17);
+  const hStab = new THREE.Mesh(new THREE.BoxGeometry(16, 0.5, 5), wingMat);
+  hStab.position.set(0, 8.5, -17);
+  g.add(vFin, hStab);
+
+  // 4 Turboprop Engines & Spinning Propellers
+  const engineX = [-14, -7, 7, 14];
+  engineX.forEach(ex => {
+    const nacelle = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 6, 12), engineMat);
+    nacelle.rotation.x = Math.PI / 2;
+    nacelle.position.set(ex, 1.5, 5);
+    g.add(nacelle);
+
+    // Propeller Blades
+    const prop1 = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.25, 0.08), propMat);
+    const prop2 = new THREE.Mesh(new THREE.BoxGeometry(0.25, 3.6, 0.08), propMat);
+    prop1.position.set(ex, 1.5, 8.1);
+    prop2.position.set(ex, 1.5, 8.1);
+    g.add(prop1, prop2);
+  });
+
+  // Open Rear Cargo Loading Door (Where players jump from!)
+  const cargoRamp = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.3, 5), wingMat);
+  cargoRamp.position.set(0, -2.4, -20.5);
+  cargoRamp.rotation.x = 0.35;
+  g.add(cargoRamp);
+
+  return g;
+}
+
+function createParachuteModel() {
+  const g = new THREE.Group();
+  const chuteMat = new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.9, side: THREE.DoubleSide });
+  const trimMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.9, side: THREE.DoubleSide });
+  const cordMat = new THREE.MeshBasicMaterial({ color: 0xe2e8f0 });
+
+  // Main Domed Parachute Canopy
+  const canopy = new THREE.Mesh(new THREE.SphereGeometry(3.6, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.45), chuteMat);
+  canopy.position.set(0, 4.8, 0);
+  g.add(canopy);
+
+  // Orange Accent Stripe
+  const stripe = new THREE.Mesh(new THREE.SphereGeometry(3.62, 16, 4, 0, Math.PI * 2, Math.PI * 0.18, Math.PI * 0.08), trimMat);
+  stripe.position.set(0, 4.8, 0);
+  g.add(stripe);
+
+  // Suspension Cords (Lines down to player)
+  for (let c = 0; c < 8; c++) {
+    const ang = (c / 8) * Math.PI * 2;
+    const topX = Math.cos(ang) * 3.4;
+    const topZ = Math.sin(ang) * 3.4;
+    const lineGeom = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(topX, 4.8 - 0.9, topZ),
+      new THREE.Vector3(0, 0.2, 0)
+    ]);
+    const line = new THREE.Line(lineGeom, cordMat);
+    g.add(line);
+  }
+
+  return g;
+}
+
+function createPubgSurvivalMap() {
+  const mapGroup = new THREE.Group();
+  const colliders = [];
+  const lootItems = [];
+  const spawnPoints = [];
+
+  // Materials
+  const floorWoodMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.7 });
+  const concreteMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.8 });
+  const brickMat = new THREE.MeshStandardMaterial({ color: 0x7c2d12, roughness: 0.85 });
+  const woodWallMat = new THREE.MeshStandardMaterial({ color: 0x451a03, roughness: 0.9 });
+  const roofTileMat = new THREE.MeshStandardMaterial({ color: 0x991b1b, roughness: 0.7 });
+  const metalBridgeMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.7, roughness: 0.3 });
+  const warehouseMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.5 });
+  const dirtRoadMat = new THREE.MeshStandardMaterial({ color: 0x78563a, roughness: 0.95 });
+  const waterMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.1, transparent: true, opacity: 0.85 });
+  const containerColors = [0xef4444, 0x3b82f6, 0x10b981, 0xf59e0b, 0x8b5cf6, 0x06b6d4];
+  const schoolYellowMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.8 });
+  const schoolRoofMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.7 });
+  const poolTileMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.35 });
+
+  // Helper Box with collider
+  const addBoxObject = (w, h, d, x, y, z, mat, hasCollider = true) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    mesh.position.set(x, y + h / 2, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mapGroup.add(mesh);
+    if (hasCollider) {
+      colliders.push({
+        minX: x - w / 2, maxX: x + w / 2,
+        minZ: z - d / 2, maxZ: z + d / 2,
+        minY: y, maxY: y + h
+      });
+    }
+    return mesh;
+  };
+
+  // 1. CLEAN NATURAL PUBG TERRAIN (2600m x 2600m - No strange cone spikes!)
+  pubgGrassTex.repeat.set(130, 130);
+  const terrainMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(2600, 2600),
+    new THREE.MeshStandardMaterial({ map: pubgGrassTex, roughness: 0.85 })
+  );
+  terrainMesh.rotation.x = -Math.PI / 2;
+  terrainMesh.position.set(0, 0, 0);
+  terrainMesh.receiveShadow = true;
+  mapGroup.add(terrainMesh);
+
+  // Distant Ocean / Water Ring Surrounding Map
+  const oceanMesh = new THREE.Mesh(
+    new THREE.RingGeometry(1290, 2200, 32),
+    waterMat
+  );
+  oceanMesh.rotation.x = -Math.PI / 2;
+  oceanMesh.position.set(0, -0.2, 0);
+  mapGroup.add(oceanMesh);
+
+  // 2. MAIN ASPHALT HIGHWAY (Z: -1250 to +1250, Width: 16m)
+  pubgRoadTex.repeat.set(1, 100);
+  const highwayMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(16, 2500),
+    new THREE.MeshStandardMaterial({ map: pubgRoadTex, roughness: 0.6, metalness: 0.1 })
+  );
+  highwayMesh.rotation.x = -Math.PI / 2;
+  highwayMesh.position.set(0, 0.04, 0);
+  highwayMesh.receiveShadow = true;
+  mapGroup.add(highwayMesh);
+
+  // East-West Cross Avenues
+  const addCrossRoad = (zPos, width = 14, length = 1000, xOffset = 0) => {
+    const cr = new THREE.Mesh(new THREE.PlaneGeometry(width, length), dirtRoadMat);
+    cr.rotation.x = -Math.PI / 2;
+    cr.rotation.z = Math.PI / 2;
+    cr.position.set(xOffset, 0.05, zPos);
+    mapGroup.add(cr);
+  };
+  addCrossRoad(820, 14, 1100, 50);    // Rozhok Avenue
+  addCrossRoad(420, 14, 900, 150);    // School Avenue
+  addCrossRoad(-120, 16, 1200, -80);  // Pochinki Boulevard
+  addCrossRoad(-600, 14, 800, 100);   // Farm Road
+
+  // 3. RIVER & SUSPENSION HIGHWAY BRIDGE (Z: 110 to 190)
+  const riverMesh = new THREE.Mesh(new THREE.PlaneGeometry(800, 80), waterMat);
+  riverMesh.rotation.x = -Math.PI / 2;
+  riverMesh.position.set(0, 0.02, 150);
+  mapGroup.add(riverMesh);
+
+  // Steel Truss Bridge
+  addBoxObject(18, 1.2, 90, 0, 1.2, 150, concreteMat);
+  addBoxObject(1.4, 24, 1.4, -9.5, 1.2, 120, metalBridgeMat);
+  addBoxObject(1.4, 24, 1.4, 9.5, 1.2, 120, metalBridgeMat);
+  addBoxObject(1.4, 24, 1.4, -9.5, 1.2, 180, metalBridgeMat);
+  addBoxObject(1.4, 24, 1.4, 9.5, 1.2, 180, metalBridgeMat);
+  addBoxObject(20.4, 1.4, 1.4, 0, 24, 120, metalBridgeMat);
+  addBoxObject(20.4, 1.4, 1.4, 0, 24, 180, metalBridgeMat);
+  addBoxObject(0.8, 1.4, 90, -9.5, 1.8, 150, metalBridgeMat);
+  addBoxObject(0.8, 1.4, 90, 9.5, 1.8, 150, metalBridgeMat);
+
+  // 4. ENTERABLE HOUSE GENERATOR (100% OPEN DOORWAYS & CLIMBABLE STAIRS)
+  const addEnterableHouse = (cx, cz, rotY = 0) => {
+    const houseGroup = new THREE.Group();
+    houseGroup.position.set(cx, 0, cz);
+    houseGroup.rotation.y = rotY;
+
+    // Ground Floor Plate
+    const gf = new THREE.Mesh(new THREE.BoxGeometry(16, 0.3, 20), floorWoodMat);
+    gf.position.set(0, 0.15, 0);
+    houseGroup.add(gf);
+
+    const addHW = (w, h, d, px, py, pz, mat = brickMat) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+      m.position.set(px, py + h / 2, pz);
+      m.castShadow = true; m.receiveShadow = true;
+      houseGroup.add(m);
+    };
+
+    // Ground Floor Walls
+    addHW(16, 5.8, 0.5, 0, 0.3, -9.75); // Back Wall
+    addHW(0.5, 5.8, 20, -7.75, 0.3, 0); // Left Wall
+    addHW(0.5, 5.8, 20, 7.75, 0.3, 0);  // Right Wall
+    addHW(5.5, 5.8, 0.5, -5.25, 0.3, 9.75); // Front Wall Left
+    addHW(5.5, 5.8, 0.5, 5.25, 0.3, 9.75);  // Front Wall Right
+    addHW(5.0, 1.8, 0.5, 0, 4.3, 9.75);     // Door Header (Doorway width 5.0m, height 4.0m)
+
+    // Interior Ground Partition Wall with doorway
+    addHW(6, 5.8, 0.4, 4.5, 0.3, 0);
+    addHW(4, 5.8, 0.4, -5.5, 0.3, 0);
+    addHW(6, 1.6, 0.4, -0.5, 4.5, 0);
+
+    // 2nd Floor Slab
+    const f2Geom = new THREE.BoxGeometry(16, 0.35, 20);
+    const floor2 = new THREE.Mesh(f2Geom, floorWoodMat);
+    floor2.position.set(0, 6.1, 0);
+    houseGroup.add(floor2);
+
+    // 2nd Floor Walls & Open Balcony
+    addHW(16, 5.2, 0.5, 0, 6.25, -9.75);
+    addHW(0.5, 5.2, 20, -7.75, 6.25, 0);
+    addHW(0.5, 5.2, 20, 7.75, 6.25, 0);
+    addHW(5.5, 5.2, 0.5, -5.25, 6.25, 9.75);
+    addHW(5.5, 5.2, 0.5, 5.25, 6.25, 9.75);
+    addHW(5.0, 1.4, 0.5, 0, 10.05, 9.75);
+
+    // Open Balcony Railing
+    const bFloor = new THREE.Mesh(new THREE.BoxGeometry(8, 0.3, 4), concreteMat);
+    bFloor.position.set(0, 6.1, 11.8);
+    houseGroup.add(bFloor);
+    addHW(8, 1.2, 0.3, 0, 6.25, 13.7, metalBridgeMat);
+    addHW(0.3, 1.2, 4, -3.9, 6.25, 11.8, metalBridgeMat);
+    addHW(0.3, 1.2, 4, 3.9, 6.25, 11.8, metalBridgeMat);
+
+    // Pitched Roof
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(12, 3.8, 4), roofTileMat);
+    roof.position.set(0, 13.4, 0);
+    roof.rotation.y = Math.PI / 4;
+    houseGroup.add(roof);
+
+    // Interior Climbable Wooden Staircase
+    const numSteps = 14;
+    const stepH = 5.9 / numSteps; // ~0.42m
+    const stepD = 14.0 / numSteps; // ~1.0m
+    for (let st = 0; st < numSteps; st++) {
+      const stepMesh = new THREE.Mesh(new THREE.BoxGeometry(2.6, stepH, stepD), woodWallMat);
+      stepMesh.position.set(5.5, 0.3 + (st + 0.5) * stepH, -7.5 + (st + 0.5) * stepD);
+      houseGroup.add(stepMesh);
+    }
+
+    mapGroup.add(houseGroup);
+
+    // Colliders for Enterable House
+    if (rotY === Math.PI) {
+      colliders.push({ minX: cx - 8.2, maxX: cx + 8.2, minZ: cz + 9.3, maxZ: cz + 10.3, minY: 0, maxY: 12 });
+      colliders.push({ minX: cx - 8.2, maxX: cx - 2.8, minZ: cz - 10.3, maxZ: cz - 9.3, minY: 0, maxY: 12 });
+      colliders.push({ minX: cx + 2.8, maxX: cx + 8.2, minZ: cz - 10.3, maxZ: cz - 9.3, minY: 0, maxY: 12 });
+    } else {
+      colliders.push({ minX: cx - 8.2, maxX: cx + 8.2, minZ: cz - 10.3, maxZ: cz - 9.3, minY: 0, maxY: 12 });
+      colliders.push({ minX: cx - 8.2, maxX: cx - 2.8, minZ: cz + 9.3, maxZ: cz + 10.3, minY: 0, maxY: 12 });
+      colliders.push({ minX: cx + 2.8, maxX: cx + 8.2, minZ: cz + 9.3, maxZ: cz + 10.3, minY: 0, maxY: 12 });
+    }
+    colliders.push({ minX: cx - 8.3, maxX: cx - 7.3, minZ: cz - 10.3, maxZ: cz + 10.3, minY: 0, maxY: 12 });
+    colliders.push({ minX: cx + 7.3, maxX: cx + 8.3, minZ: cz - 10.3, maxZ: cz + 10.3, minY: 0, maxY: 12 });
+
+    // Stair Colliders
+    if (rotY === Math.PI) {
+      for (let st = 0; st < numSteps; st++) {
+        const sZ = cz + 7.5 - st * stepD;
+        const sY = 0.2 + (st + 1) * stepH;
+        colliders.push({ minX: cx - 6.9, maxX: cx - 4.1, minZ: sZ - stepD * 0.55, maxZ: sZ + stepD * 0.55, minY: 0, maxY: sY });
+      }
+      colliders.push({ minX: cx - 3.8, maxX: cx + 7.8, minZ: cz - 9.8, maxZ: cz + 9.8, minY: 5.9, maxY: 6.35 });
+      colliders.push({ minX: cx - 7.8, maxX: cx - 3.8, minZ: cz - 9.8, maxZ: cz - 0.5, minY: 5.9, maxY: 6.35 });
+      colliders.push({ minX: cx - 4.0, maxX: cx + 4.0, minZ: cz - 13.8, maxZ: cz - 9.8, minY: 5.9, maxY: 6.35 });
+    } else {
+      for (let st = 0; st < numSteps; st++) {
+        const sZ = cz - 7.5 + st * stepD;
+        const sY = 0.2 + (st + 1) * stepH;
+        colliders.push({ minX: cx + 4.1, maxX: cx + 6.9, minZ: sZ - stepD * 0.55, maxZ: sZ + stepD * 0.55, minY: 0, maxY: sY });
+      }
+      colliders.push({ minX: cx - 7.8, maxX: cx + 3.8, minZ: cz - 9.8, maxZ: cz + 9.8, minY: 5.9, maxY: 6.35 });
+      colliders.push({ minX: cx + 3.8, maxX: cx + 7.8, minZ: cz + 0.5, maxZ: cz + 9.8, minY: 5.9, maxY: 6.35 });
+      colliders.push({ minX: cx - 4.0, maxX: cx + 4.0, minZ: cz + 9.8, maxZ: cz + 13.8, minY: 5.9, maxY: 6.35 });
+    }
+  };
+
+  // 5. PUBG SCHOOL COMPLEX & ADJACENT INDOOR SWIMMING POOL (Z: 420, X: 350)
+  const addPubgSchool = (cx, cz) => {
+    const schoolGroup = new THREE.Group();
+    schoolGroup.position.set(cx, 0, cz);
+
+    const gFloor = new THREE.Mesh(new THREE.BoxGeometry(54, 0.4, 40), concreteMat);
+    gFloor.position.set(0, 0.2, 0);
+    schoolGroup.add(gFloor);
+
+    const addSW = (w, h, d, px, py, pz, mat = schoolYellowMat) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+      m.position.set(px, py + h / 2, pz);
+      m.castShadow = true; m.receiveShadow = true;
+      schoolGroup.add(m);
+    };
+
+    // Ground Floor Outer Walls
+    addSW(23, 5.2, 0.6, -15.5, 0.4, 19.7);
+    addSW(23, 5.2, 0.6, 15.5, 0.4, 19.7);
+    addSW(8, 1.4, 0.6, 0, 4.2, 19.7);
+    addSW(54, 5.2, 0.6, 0, 0.4, -19.7);
+    addSW(0.6, 5.2, 40, -26.7, 0.4, 0);
+    addSW(0.6, 5.2, 40, 26.7, 0.4, 0);
+
+    // Ground Floor Classroom Partition Walls
+    addSW(20, 5.0, 0.4, -15, 0.4, 0);
+    addSW(20, 5.0, 0.4, 15, 0.4, 0);
+    addSW(0.4, 5.0, 16, -6, 0.4, 10);
+    addSW(0.4, 5.0, 16, 6, 0.4, 10);
+    addSW(0.4, 5.0, 16, -6, 0.4, -10);
+    addSW(0.4, 5.0, 16, 6, 0.4, -10);
+
+    // 2nd Floor Slab
+    const floor2 = new THREE.Mesh(new THREE.BoxGeometry(46, 0.4, 40), floorWoodMat);
+    floor2.position.set(0, 5.6, 0);
+    schoolGroup.add(floor2);
+
+    // 2nd Floor Walls
+    addSW(54, 4.8, 0.6, 0, 5.8, 19.7, schoolYellowMat);
+    addSW(54, 4.8, 0.6, 0, 5.8, -19.7, schoolYellowMat);
+    addSW(0.6, 4.8, 40, -26.7, 5.8, 0, schoolYellowMat);
+    addSW(0.6, 4.8, 40, 26.7, 5.8, 0, schoolYellowMat);
+    addSW(0.4, 4.8, 38, -6, 5.8, 0, concreteMat);
+    addSW(0.4, 4.8, 38, 6, 5.8, 0, concreteMat);
+
+    // School Roof Terrace (10.6m high)
+    const roofSlab = new THREE.Mesh(new THREE.BoxGeometry(54, 0.5, 40), schoolRoofMat);
+    roofSlab.position.set(0, 10.6, 0);
+    schoolGroup.add(roofSlab);
+
+    // Roof Parapets
+    addSW(54, 1.2, 0.5, 0, 10.85, 19.75, concreteMat);
+    addSW(54, 1.2, 0.5, 0, 10.85, -19.75, concreteMat);
+    addSW(0.5, 1.2, 40, -26.75, 10.85, 0, concreteMat);
+    addSW(0.5, 1.2, 40, 26.75, 10.85, 0, concreteMat);
+
+    // Roof HVAC & sniper sandbags
+    addSW(6, 2.2, 4, -12, 10.85, 6, warehouseMat);
+    addSW(6, 2.2, 4, 12, 10.85, -6, warehouseMat);
+    addSW(8, 1.4, 1.2, 0, 10.85, 14, concreteMat);
+
+    // Interior Stairs
+    for (let st = 0; st < 13; st++) {
+      const step1 = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.4, 0.6), concreteMat);
+      step1.position.set(-22, 0.2 + (st + 0.5) * 0.4, -12 + st * 0.6);
+      schoolGroup.add(step1);
+      const step2 = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.4, 0.6), concreteMat);
+      step2.position.set(-22, 5.6 + (st + 0.5) * 0.4, -4 + st * 0.6);
+      schoolGroup.add(step2);
+    }
+    for (let st = 0; st < 13; st++) {
+      const step1 = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.4, 0.6), concreteMat);
+      step1.position.set(22, 0.2 + (st + 0.5) * 0.4, 12 - st * 0.6);
+      schoolGroup.add(step1);
+      const step2 = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.4, 0.6), concreteMat);
+      step2.position.set(22, 5.6 + (st + 0.5) * 0.4, 4 - st * 0.6);
+      schoolGroup.add(step2);
+    }
+
+    // Indoor Swimming Pool Hall (X: -43)
+    const poolFloor = new THREE.Mesh(new THREE.BoxGeometry(30, 0.4, 28), concreteMat);
+    poolFloor.position.set(-43, 0.2, 0);
+    schoolGroup.add(poolFloor);
+    const poolBasin = new THREE.Mesh(new THREE.BoxGeometry(18, 0.2, 12), poolTileMat);
+    poolBasin.position.set(-43, 0.3, 0);
+    schoolGroup.add(poolBasin);
+    addSW(1.5, 3.2, 1.5, -50, 0.4, 0, metalBridgeMat);
+    addSW(5.5, 0.3, 1.8, -47.5, 3.6, 0, concreteMat);
+    addSW(30, 11, 0.6, -43, 0.4, 13.7, brickMat);
+    addSW(30, 11, 0.6, -43, 0.4, -13.7, brickMat);
+    addSW(0.6, 11, 28, -57.7, 0.4, 0, brickMat);
+    addSW(6, 11, 0.6, -30, 0.4, 4, concreteMat);
+    addSW(6, 11, 0.6, -30, 0.4, -4, concreteMat);
+
+    // Basketball Courtyard
+    const court = new THREE.Mesh(new THREE.PlaneGeometry(28, 18), new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.9 }));
+    court.rotation.x = -Math.PI / 2;
+    court.position.set(0, 0.05, 32);
+    schoolGroup.add(court);
+
+    mapGroup.add(schoolGroup);
+
+    // Colliders for School
+    colliders.push({ minX: cx - 27, maxX: cx + 27, minZ: cz - 20, maxZ: cz - 19, minY: 0, maxY: 12 });
+    colliders.push({ minX: cx - 27, maxX: cx - 4, minZ: cz + 19, maxZ: cz + 20, minY: 0, maxY: 12 });
+    colliders.push({ minX: cx + 4, maxX: cx + 27, minZ: cz + 19, maxZ: cz + 20, minY: 0, maxY: 12 });
+    colliders.push({ minX: cx - 27.2, maxX: cx - 26.2, minZ: cz - 20, maxZ: cz + 20, minY: 0, maxY: 12 });
+    colliders.push({ minX: cx + 26.2, maxX: cx + 27.2, minZ: cz - 20, maxZ: cz + 20, minY: 0, maxY: 12 });
+    colliders.push({ minX: cx - 26, maxX: cx + 26, minZ: cz - 19, maxZ: cz + 19, minY: 5.4, maxY: 5.85 });
+    colliders.push({ minX: cx - 27, maxX: cx + 27, minZ: cz - 20, maxZ: cz + 20, minY: 10.4, maxY: 10.85 });
+    colliders.push({ minX: cx - 58, maxX: cx - 28, minZ: cz - 14, maxZ: cz - 13, minY: 0, maxY: 12 });
+    colliders.push({ minX: cx - 58, maxX: cx - 28, minZ: cz + 13, maxZ: cz + 14, minY: 0, maxY: 12 });
+    colliders.push({ minX: cx - 58.2, maxX: cx - 57.2, minZ: cz - 14, maxZ: cz + 14, minY: 0, maxY: 12 });
+  };
+  addPubgSchool(350, 420);
+
+  // 6. THREE-STORY APARTMENT BUILDINGS (School Apartments & Yasnaya)
+  const addApartmentBuilding = (ax, az, rotY = 0) => {
+    const apt = new THREE.Group();
+    apt.position.set(ax, 0, az);
+    apt.rotation.y = rotY;
+
+    const gf = new THREE.Mesh(new THREE.BoxGeometry(22, 0.4, 22), concreteMat);
+    gf.position.set(0, 0.2, 0);
+    apt.add(gf);
+
+    const addAW = (w, h, d, px, py, pz, mat = brickMat) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+      m.position.set(px, py + h / 2, pz);
+      m.castShadow = true; m.receiveShadow = true;
+      apt.add(m);
+    };
+
+    for (let fl = 0; fl < 3; fl++) {
+      const yBase = 0.4 + fl * 4.2;
+      if (fl > 0) {
+        const slab = new THREE.Mesh(new THREE.BoxGeometry(20, 0.35, 20), floorWoodMat);
+        slab.position.set(0, yBase, 0);
+        apt.add(slab);
+      }
+      if (fl === 0) {
+        addAW(8, 4.0, 0.5, -6.5, yBase, 10.7);
+        addAW(8, 4.0, 0.5, 6.5, yBase, 10.7);
+      } else {
+        addAW(22, 4.0, 0.5, 0, yBase, 10.7);
+      }
+      addAW(22, 4.0, 0.5, 0, yBase, -10.7);
+      addAW(0.5, 4.0, 22, -10.7, yBase, 0);
+      addAW(0.5, 4.0, 22, 10.7, yBase, 0);
+      addAW(0.4, 4.0, 14, 0, yBase, -3);
+
+      for (let st = 0; st < 10; st++) {
+        const sm = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.42, 0.55), concreteMat);
+        sm.position.set(-6, yBase + (st + 0.5) * 0.42, -7 + st * 0.55);
+        apt.add(sm);
+      }
+    }
+
+    const roofSlab = new THREE.Mesh(new THREE.BoxGeometry(22, 0.4, 22), concreteMat);
+    roofSlab.position.set(0, 13.2, 0);
+    apt.add(roofSlab);
+    addAW(22, 1.2, 0.4, 0, 13.4, 10.8, concreteMat);
+    addAW(22, 1.2, 0.4, 0, 13.4, -10.8, concreteMat);
+    addAW(0.4, 1.2, 22, -10.8, 13.4, 0, concreteMat);
+    addAW(0.4, 1.2, 22, 10.8, 13.4, 0, concreteMat);
+
+    mapGroup.add(apt);
+
+    colliders.push({ minX: ax - 11.2, maxX: ax + 11.2, minZ: az - 11.2, maxZ: az - 10.2, minY: 0, maxY: 14.5 });
+    colliders.push({ minX: ax - 11.2, maxX: ax - 2.8, minZ: az + 10.2, maxZ: az + 11.2, minY: 0, maxY: 14.5 });
+    colliders.push({ minX: ax + 2.8, maxX: ax + 11.2, minZ: az + 10.2, maxZ: az + 11.2, minY: 0, maxY: 14.5 });
+    colliders.push({ minX: ax - 11.2, maxX: ax - 10.2, minZ: az - 11.2, maxZ: az + 11.2, minY: 0, maxY: 14.5 });
+    colliders.push({ minX: ax + 10.2, maxX: ax + 11.2, minZ: az - 11.2, maxZ: az + 11.2, minY: 0, maxY: 14.5 });
+    colliders.push({ minX: ax - 11, maxX: ax + 11, minZ: az - 11, maxZ: az + 11, minY: 13.0, maxY: 13.45 });
+  };
+
+  // School Apartments Cluster
+  addApartmentBuilding(460, 390, 0);
+  addApartmentBuilding(460, 450, 0);
+  addApartmentBuilding(510, 420, Math.PI / 2);
+
+  // 7. POCHINKI CHURCH & CLIMBABLE BELL TOWER
+  const addPochinkiChurch = (cx, cz) => {
+    const ch = new THREE.Group();
+    ch.position.set(cx, 0, cz);
+    const stoneMat = new THREE.MeshStandardMaterial({ color: 0x78716c, roughness: 0.95 });
+
+    const fl = new THREE.Mesh(new THREE.BoxGeometry(18, 0.4, 34), stoneMat);
+    fl.position.set(0, 0.2, 0);
+    ch.add(fl);
+
+    const addCW = (w, h, d, px, py, pz) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), stoneMat);
+      m.position.set(px, py + h / 2, pz);
+      ch.add(m);
+    };
+    addCW(18, 12, 0.8, 0, 0.4, -16.6);
+    addCW(0.8, 12, 34, -8.6, 0.4, 0);
+    addCW(0.8, 12, 34, 8.6, 0.4, 0);
+    addCW(6.5, 12, 0.8, -5.5, 0.4, 16.6);
+    addCW(6.5, 12, 0.8, 5.5, 0.4, 16.6);
+    addCW(5, 4.5, 0.8, 0, 7.5, 16.6);
+
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(14, 6, 4), roofTileMat);
+    roof.position.set(0, 15, 0);
+    roof.rotation.y = Math.PI / 4;
+    ch.add(roof);
+
+    const tower = new THREE.Mesh(new THREE.BoxGeometry(7, 26, 7), stoneMat);
+    tower.position.set(-8.5, 13, 16.5);
+    ch.add(tower);
+    const spire = new THREE.Mesh(new THREE.ConeGeometry(5.5, 8, 4), roofTileMat);
+    spire.position.set(-8.5, 30, 16.5);
+    spire.rotation.y = Math.PI / 4;
+    ch.add(spire);
+
+    mapGroup.add(ch);
+
+    colliders.push({ minX: cx - 9.2, maxX: cx + 9.2, minZ: cz - 17.2, maxZ: cz - 16.0, minY: 0, maxY: 13 });
+    colliders.push({ minX: cx - 9.2, maxX: cx - 2.5, minZ: cz + 16.0, maxZ: cz + 17.2, minY: 0, maxY: 13 });
+    colliders.push({ minX: cx + 2.5, maxX: cx + 9.2, minZ: cz + 16.0, maxZ: cz + 17.2, minY: 0, maxY: 13 });
+    colliders.push({ minX: cx - 9.2, maxX: cx - 8.0, minZ: cz - 17.2, maxZ: cz + 17.2, minY: 0, maxY: 13 });
+    colliders.push({ minX: cx + 8.0, maxX: cx + 9.2, minZ: cz - 17.2, maxZ: cz + 17.2, minY: 0, maxY: 13 });
+  };
+  addPochinkiChurch(-340, -10);
+
+  // 8. DENSE POCHINKI TOWN (16 ENTERABLE 2-STORY HOUSES!)
+  // South Avenue (Z: -60)
+  addEnterableHouse(-45, -60, 0);
+  addEnterableHouse(-80, -60, 0);
+  addEnterableHouse(-115, -60, 0);
+  addEnterableHouse(-150, -60, 0);
+  addEnterableHouse(-185, -60, 0);
+  addEnterableHouse(-220, -60, 0);
+  addEnterableHouse(-255, -60, 0);
+  addEnterableHouse(-290, -60, 0);
+
+  // North Avenue (Z: 40)
+  addEnterableHouse(-45, 40, Math.PI);
+  addEnterableHouse(-80, 40, Math.PI);
+  addEnterableHouse(-115, 40, Math.PI);
+  addEnterableHouse(-150, 40, Math.PI);
+  addEnterableHouse(-185, 40, Math.PI);
+  addEnterableHouse(-220, 40, Math.PI);
+  addEnterableHouse(-255, 40, Math.PI);
+  addEnterableHouse(-290, 40, Math.PI);
+
+  // Pochinki Stone Walls & Fences
+  addBoxObject(110, 1.5, 0.6, -110, 0, -85, concreteMat);
+  addBoxObject(110, 1.5, 0.6, -235, 0, -85, concreteMat);
+  addBoxObject(110, 1.5, 0.6, -110, 0, 65, concreteMat);
+  addBoxObject(110, 1.5, 0.6, -235, 0, 65, concreteMat);
+
+  // 9. ROZHOK RIDGE (12 ENTERABLE 2-STORY HOUSES)
+  // South Row (Z: 760)
+  addEnterableHouse(-40, 760, 0);
+  addEnterableHouse(0, 760, 0);
+  addEnterableHouse(40, 760, 0);
+  addEnterableHouse(80, 760, 0);
+  addEnterableHouse(120, 760, 0);
+  addEnterableHouse(160, 760, 0);
+
+  // North Row (Z: 880)
+  addEnterableHouse(-40, 880, Math.PI);
+  addEnterableHouse(0, 880, Math.PI);
+  addEnterableHouse(40, 880, Math.PI);
+  addEnterableHouse(80, 880, Math.PI);
+  addEnterableHouse(120, 880, Math.PI);
+  addEnterableHouse(160, 880, Math.PI);
+
+  // Rozhok Water Tower
+  const wtLegMat = metalBridgeMat;
+  addBoxObject(1.2, 28, 1.2, 55, 0, 820, wtLegMat);
+  addBoxObject(1.2, 28, 1.2, 65, 0, 820, wtLegMat);
+  addBoxObject(1.2, 28, 1.2, 55, 0, 830, wtLegMat);
+  addBoxObject(1.2, 28, 1.2, 65, 0, 830, wtLegMat);
+  const tank = new THREE.Mesh(new THREE.CylinderGeometry(8, 8, 12, 16), concreteMat);
+  tank.position.set(60, 34, 825);
+  mapGroup.add(tank);
+
+  // 10. YASNAYA POLYANA (8 HOUSES + 2 APARTMENTS + CLOCK TOWER)
+  addEnterableHouse(220, 750, 0);
+  addEnterableHouse(260, 750, 0);
+  addEnterableHouse(300, 750, 0);
+  addEnterableHouse(340, 750, 0);
+  addEnterableHouse(220, 840, Math.PI);
+  addEnterableHouse(260, 840, Math.PI);
+  addEnterableHouse(300, 840, Math.PI);
+  addEnterableHouse(340, 840, Math.PI);
+  addApartmentBuilding(380, 740, 0);
+  addApartmentBuilding(380, 840, Math.PI);
+
+  // Yasnaya Clock Tower
+  addBoxObject(10, 36, 10, 300, 0, 800, brickMat);
+  const clockDial = addBoxObject(4.5, 4.5, 0.4, 300, 30, 805.2, floorWoodMat);
+
+  // 11. FARM ESTATE (6 ENTERABLE HOUSES + 2 RED BARNS)
+  addEnterableHouse(80, -550, 0);
+  addEnterableHouse(120, -550, 0);
+  addEnterableHouse(160, -550, 0);
+  addEnterableHouse(80, -650, Math.PI);
+  addEnterableHouse(120, -650, Math.PI);
+  addEnterableHouse(160, -650, Math.PI);
+
+  const addBarn = (bx, bz) => {
+    const barn = new THREE.Group();
+    barn.position.set(bx, 0, bz);
+    const bMat = new THREE.MeshStandardMaterial({ color: 0x991b1b, roughness: 0.8 });
+    const fl = new THREE.Mesh(new THREE.BoxGeometry(28, 0.3, 18), floorWoodMat);
+    fl.position.set(0, 0.15, 0);
+    barn.add(fl);
+    const w1 = new THREE.Mesh(new THREE.BoxGeometry(28, 8, 0.4), bMat); w1.position.set(0, 4, -8.8);
+    const w2 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 8, 18), bMat); w2.position.set(-13.8, 4, 0);
+    const w3 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 8, 18), bMat); w3.position.set(13.8, 4, 0);
+    const w4a = new THREE.Mesh(new THREE.BoxGeometry(10, 8, 0.4), bMat); w4a.position.set(-8.8, 4, 8.8);
+    const w4b = new THREE.Mesh(new THREE.BoxGeometry(10, 8, 0.4), bMat); w4b.position.set(8.8, 4, 8.8);
+    barn.add(w1, w2, w3, w4a, w4b);
+    mapGroup.add(barn);
+
+    colliders.push({ minX: bx - 14.2, maxX: bx + 14.2, minZ: bz - 9.2, maxZ: bz - 8.2, minY: 0, maxY: 8 });
+    colliders.push({ minX: bx - 14.2, maxX: bx - 13.2, minZ: bz - 9.2, maxZ: bz + 9.2, minY: 0, maxY: 8 });
+    colliders.push({ minX: bx + 13.2, maxX: bx + 14.2, minZ: bz - 9.2, maxZ: bz + 9.2, minY: 0, maxY: 8 });
+    colliders.push({ minX: bx - 14.2, maxX: bx - 4.0, minZ: bz + 8.2, maxZ: bz + 9.2, minY: 0, maxY: 8 });
+    colliders.push({ minX: bx + 4.0, maxX: bx + 14.2, minZ: bz + 8.2, maxZ: bz + 9.2, minY: 0, maxY: 8 });
+  };
+  addBarn(120, -470);
+  addBarn(180, -470);
+
+  // 12. MYLTA & COASTAL SECTOR (6 HOUSES & LIGHTHOUSE)
+  addEnterableHouse(-120, -750, 0);
+  addEnterableHouse(-160, -750, 0);
+  addEnterableHouse(-200, -750, 0);
+  addEnterableHouse(-120, -840, Math.PI);
+  addEnterableHouse(-160, -840, Math.PI);
+  addEnterableHouse(-200, -840, Math.PI);
+
+  const lhBase = addBoxObject(12, 6, 12, -280, 0, -800, concreteMat);
+  const lhTower = new THREE.Mesh(new THREE.CylinderGeometry(4.5, 6.5, 28, 16), new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.6 }));
+  lhTower.position.set(-280, 20, -800);
+  mapGroup.add(lhTower);
+  colliders.push({ minX: -286, maxX: -274, minZ: -806, maxZ: -794, minY: 0, maxY: 34 });
+
+  // 13. PORT CARGO CRANE & CONTAINERS
+  addBoxObject(2.4, 38, 2.4, -280, 0, 640, metalBridgeMat);
+  addBoxObject(2.4, 38, 2.4, -280, 0, 690, metalBridgeMat);
+  addBoxObject(2.4, 4, 60, -280, 38, 665, metalBridgeMat);
+  addBoxObject(30, 3, 2.4, -280, 38, 665, metalBridgeMat);
+
+  const addContainer = (cx, cz, cy = 0, rotY = 0, colorIdx = 0) => {
+    const cMat = new THREE.MeshStandardMaterial({ color: containerColors[colorIdx % containerColors.length], roughness: 0.5, metalness: 0.5 });
+    const c = addBoxObject(4.5, 4.5, 12, cx, cy, cz, cMat);
+    if (rotY !== 0) c.rotation.y = rotY;
+  };
+  for (let ci = 0; ci < 6; ci++) {
+    addContainer(-240, 620 + ci * 14, 0, 0, ci);
+    if (ci % 2 === 0) addContainer(-240, 620 + ci * 14, 4.5, 0, ci + 1);
+    addContainer(-320, 620 + ci * 14, 0, 0, ci + 2);
+    if (ci % 3 === 0) addContainer(-320, 620 + ci * 14, 4.5, 0, ci + 3);
+  }
+
+  // Military Warehouses
+  const addWarehouse = (wx, wz, rot = 0) => {
+    const wh = new THREE.Group();
+    wh.position.set(wx, 0, wz);
+    wh.rotation.y = rot;
+    const wH = 11;
+    const makeW = (w, h, d, px, pz) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), warehouseMat);
+      m.position.set(px, h / 2, pz);
+      wh.add(m);
+    };
+    makeW(45, wH, 0.6, 0, -12.7);
+    makeW(0.6, wH, 26, -22.2, 0);
+    makeW(0.6, wH, 26, 22.2, 0);
+    makeW(16, wH, 0.6, -14.2, 12.7);
+    makeW(16, wH, 0.6, 14.2, 12.7);
+    const roofGeom = new THREE.CylinderGeometry(14, 14, 46, 24, 1, false, 0, Math.PI);
+    const roofM = new THREE.Mesh(roofGeom, warehouseMat);
+    roofM.rotation.z = Math.PI / 2;
+    roofM.position.set(0, wH, 0);
+    wh.add(roofM);
+    mapGroup.add(wh);
+
+    colliders.push({ minX: wx - 23, maxX: wx + 23, minZ: wz - 13.2, maxZ: wz - 12.2, minY: 0, maxY: 11 });
+    colliders.push({ minX: wx - 23, maxX: wx - 21.6, minZ: wz - 13.2, maxZ: wz + 13.2, minY: 0, maxY: 11 });
+    colliders.push({ minX: wx + 21.6, maxX: wx + 23, minZ: wz - 13.2, maxZ: wz + 13.2, minY: 0, maxY: 11 });
+    colliders.push({ minX: wx - 23, maxX: wx - 6.5, minZ: wz + 12.2, maxZ: wz + 13.2, minY: 0, maxY: 11 });
+    colliders.push({ minX: wx + 6.5, maxX: wx + 23, minZ: wz + 12.2, maxZ: wz + 13.2, minY: 0, maxY: 11 });
+  };
+  addWarehouse(0, -900, 0);
+  addWarehouse(-70, -860, Math.PI / 2);
+
+  // Watchtowers across compounds
+  const addWatchtower = (tx, tz) => {
+    addBoxObject(0.6, 15, 0.6, tx - 2.8, 0, tz - 2.8, woodWallMat);
+    addBoxObject(0.6, 15, 0.6, tx + 2.8, 0, tz - 2.8, woodWallMat);
+    addBoxObject(0.6, 15, 0.6, tx - 2.8, 0, tz + 2.8, woodWallMat);
+    addBoxObject(0.6, 15, 0.6, tx + 2.8, 0, tz + 2.8, woodWallMat);
+    addBoxObject(6.8, 0.35, 6.8, tx, 15, tz, floorWoodMat);
+    colliders.push({ minX: tx - 3.4, maxX: tx + 3.4, minZ: tz - 3.4, maxZ: tz + 3.4, minY: 14.8, maxY: 17 });
+  };
+  addWatchtower(-120, -550);
+  addWatchtower(140, -320);
+  addWatchtower(-130, 120);
+  addWatchtower(90, 520);
+  addWatchtower(260, 950);
+
+  // 14. SPARSE REALISTIC RNG LOOT SYSTEM (~35% CHANCE: MANY ROOMS EMPTY AS REQUESTED)
+  const addBandageLoot = (lx, ly, lz) => {
+    const lg = new THREE.Group(); lg.position.set(lx, ly + 0.35, lz);
+    const r1 = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.5, 18), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 }));
+    r1.rotation.z = Math.PI / 2;
+    lg.add(r1);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.65, 0.9, 24), new THREE.MeshBasicMaterial({ color: 0x22c55e, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = -0.3; lg.add(ring);
+    mapGroup.add(lg);
+    lootItems.push({ type: 'bandage', name: '3x Bandaj (+45 Can)', mesh: lg, pos: new THREE.Vector3(lx, ly, lz), radius: 3.2, collected: false });
+  };
+
+  const addMedkitLoot = (lx, ly, lz) => {
+    const lg = new THREE.Group(); lg.position.set(lx, ly + 0.45, lz);
+    const box = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.55, 0.75), new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.35 }));
+    lg.add(box);
+    mapGroup.add(lg);
+    lootItems.push({ type: 'medkit', name: 'İlk Yardım Çantası (Tam Can)', mesh: lg, pos: new THREE.Vector3(lx, ly, lz), radius: 3.2, collected: false });
+  };
+
+  const addWeaponLoot = (gunName, lx, ly, lz) => {
+    const lg = new THREE.Group(); lg.position.set(lx, ly + 0.6, lz);
+    let wModel;
+    if (gunName === 'Sniper') wModel = createSniperModel(false);
+    else if (gunName === 'Shawty') wModel = createShawtyModel(false);
+    else if (gunName === 'Burst Rifle') wModel = createBurstRifleModel(false);
+    else if (gunName === 'Pistol') wModel = createTwoTonePistolModel(false);
+    else wModel = createAuthenticAK47Model(false);
+    wModel.scale.set(0.65, 0.65, 0.65);
+    lg.add(wModel);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.8, 1.1, 24), new THREE.MeshBasicMaterial({ color: 0xfacc15, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = -0.45; lg.add(ring);
+    mapGroup.add(lg);
+    lootItems.push({ type: 'weapon', gunName: gunName, name: `🔫 ${gunName} Al`, mesh: lg, pos: new THREE.Vector3(lx, ly, lz), radius: 3.2, collected: false });
+  };
+
+  const addSilencerLoot = (lx, ly, lz) => {
+    const lg = new THREE.Group(); lg.position.set(lx, ly + 0.5, lz);
+    const sModel = createSilencerModel();
+    sModel.scale.set(2.4, 2.4, 2.4);
+    lg.add(sModel);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.7, 0.95, 24), new THREE.MeshBasicMaterial({ color: 0x06b6d4, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = -0.35; lg.add(ring);
+    mapGroup.add(lg);
+    lootItems.push({ type: 'silencer', name: '🤫 Susturucu (Silencer) Al', mesh: lg, pos: new THREE.Vector3(lx, ly, lz), radius: 3.2, collected: false });
+  };
+
+  // Loot spots throughout houses, school, apartments, church, and warehouses
+  const candidateLootSpots = [
+    // PUBG SCHOOL
+    { x: 350, y: 0.2, z: 410, pref: 'weapon' }, { x: 340, y: 0.2, z: 425, pref: 'weapon' },
+    { x: 360, y: 0.2, z: 425, pref: 'bandage' }, { x: 340, y: 5.8, z: 415, pref: 'weapon' },
+    { x: 360, y: 5.8, z: 415, pref: 'silencer' }, { x: 350, y: 11.0, z: 420, pref: 'sniper' },
+    { x: 338, y: 11.0, z: 430, pref: 'weapon' }, { x: 362, y: 11.0, z: 410, pref: 'medkit' },
+    { x: 307, y: 0.2, z: 420, pref: 'weapon' }, { x: 298, y: 3.8, z: 420, pref: 'silencer' },
+    // SCHOOL APARTMENTS
+    { x: 460, y: 0.2, z: 390, pref: 'weapon' }, { x: 460, y: 8.8, z: 390, pref: 'medkit' }, { x: 460, y: 13.5, z: 390, pref: 'sniper' },
+    { x: 460, y: 0.2, z: 450, pref: 'weapon' }, { x: 460, y: 13.5, z: 450, pref: 'sniper' },
+    { x: 510, y: 0.2, z: 420, pref: 'weapon' }, { x: 510, y: 13.5, z: 420, pref: 'silencer' },
+    // POCHINKI CHURCH & HOUSES
+    { x: -340, y: 0.2, z: -10, pref: 'weapon' }, { x: -348, y: 14.0, z: 6, pref: 'sniper' },
+    { x: -45, y: 0.2, z: -60, pref: 'weapon' }, { x: -80, y: 0.2, z: -60, pref: 'bandage' }, { x: -80, y: 6.4, z: -60, pref: 'medkit' },
+    { x: -115, y: 0.2, z: -60, pref: 'weapon' }, { x: -150, y: 6.4, z: -60, pref: 'silencer' },
+    { x: -185, y: 0.2, z: -60, pref: 'weapon' }, { x: -220, y: 0.2, z: -60, pref: 'weapon' },
+    { x: -45, y: 0.2, z: 40, pref: 'weapon' }, { x: -80, y: 0.2, z: 40, pref: 'bandage' },
+    { x: -115, y: 6.4, z: 40, pref: 'silencer' }, { x: -150, y: 0.2, z: 40, pref: 'weapon' },
+    { x: -185, y: 6.4, z: 40, pref: 'medkit' }, { x: -220, y: 0.2, z: 40, pref: 'weapon' },
+    // ROZHOK RIDGE
+    { x: -40, y: 0.2, z: 760, pref: 'weapon' }, { x: 0, y: 0.2, z: 760, pref: 'bandage' },
+    { x: 40, y: 6.4, z: 760, pref: 'silencer' }, { x: 80, y: 0.2, z: 760, pref: 'weapon' },
+    { x: 120, y: 0.2, z: 760, pref: 'medkit' }, { x: 160, y: 6.4, z: 760, pref: 'weapon' },
+    { x: 0, y: 0.2, z: 880, pref: 'weapon' }, { x: 40, y: 0.2, z: 880, pref: 'bandage' },
+    { x: 80, y: 6.4, z: 880, pref: 'silencer' }, { x: 120, y: 0.2, z: 880, pref: 'weapon' },
+    // YASNAYA POLYANA
+    { x: 220, y: 0.2, z: 750, pref: 'weapon' }, { x: 260, y: 6.4, z: 750, pref: 'silencer' },
+    { x: 300, y: 0.2, z: 750, pref: 'medkit' }, { x: 340, y: 0.2, z: 750, pref: 'weapon' },
+    { x: 220, y: 0.2, z: 840, pref: 'bandage' }, { x: 260, y: 0.2, z: 840, pref: 'weapon' },
+    { x: 380, y: 0.2, z: 740, pref: 'weapon' }, { x: 380, y: 13.5, z: 740, pref: 'sniper' },
+    { x: 300, y: 0.2, z: 800, pref: 'weapon' },
+    // FARM & COAST
+    { x: 80, y: 0.2, z: -550, pref: 'weapon' }, { x: 120, y: 0.2, z: -550, pref: 'bandage' },
+    { x: 160, y: 6.4, z: -550, pref: 'weapon' }, { x: 120, y: 0.2, z: -470, pref: 'weapon' },
+    { x: 180, y: 0.2, z: -470, pref: 'silencer' },
+    { x: -120, y: 0.2, z: -750, pref: 'weapon' }, { x: -160, y: 0.2, z: -750, pref: 'bandage' },
+    { x: -280, y: 0.2, z: -800, pref: 'sniper' },
+    // WAREHOUSES & PORT
+    { x: 0, y: 0.2, z: -900, pref: 'weapon' }, { x: -70, y: 0.2, z: -860, pref: 'silencer' },
+    { x: -280, y: 0.2, z: 650, pref: 'weapon' }
+  ];
+
+  // ~35% spawn chance: Authentic PUBG loot distribution (many rooms remain empty)
+  candidateLootSpots.forEach(spot => {
+    if (Math.random() < 0.35) {
+      const roll = Math.random();
+      if (spot.pref === 'sniper' && Math.random() < 0.5) {
+        addWeaponLoot('Sniper', spot.x, spot.y, spot.z);
+      } else if (spot.pref === 'silencer' && Math.random() < 0.4) {
+        addSilencerLoot(spot.x, spot.y, spot.z);
+      } else if (roll < 0.35) {
+        addBandageLoot(spot.x, spot.y, spot.z);
+      } else if (roll < 0.65) {
+        addWeaponLoot('Pistol', spot.x, spot.y, spot.z);
+      } else if (roll < 0.80) {
+        addWeaponLoot('Shawty', spot.x, spot.y, spot.z);
+      } else if (roll < 0.92) {
+        addWeaponLoot('AK-47', spot.x, spot.y, spot.z);
+      } else if (roll < 0.96) {
+        addSilencerLoot(spot.x, spot.y, spot.z);
+      } else {
+        addMedkitLoot(spot.x, spot.y, spot.z);
+      }
+    }
+  });
+
+  // 15. GUARANTEED PUBG UAZ 4X4 JEEPS (1 CAR ALWAYS PARKED AT TERMINAL DROP OF EACH TEAM'S FLIGHT!)
+  // Blue Team LZ (-35, -120): Blue plane's terminal drop! ALWAYS 1 CAR WAITING HERE!
+  const jeepBlue = createPubgJeepVehicle(-35, -120, 0);
+  // Red Team LZ (30, 820): Red plane's terminal drop! ALWAYS 1 CAR WAITING HERE!
+  const jeepRed = createPubgJeepVehicle(30, 820, Math.PI);
+
+  // Extra vehicles across towns
+  const jeepSchool = createPubgJeepVehicle(350, 465, 0); // School Courtyard
+  const jeepRozhok = createPubgJeepVehicle(60, 750, 0);  // Rozhok Hill
+  const jeepPochinki = createPubgJeepVehicle(-150, 0, -1.2); // Pochinki Center
+  const jeepFarm = createPubgJeepVehicle(140, -520, 0);   // Farm
+  const jeepYasnaya = createPubgJeepVehicle(250, 790, 1.5); // Yasnaya
+  const jeepCoast = createPubgJeepVehicle(-160, -700, 0.5); // Coast
+
+  mapGroup.add(
+    jeepBlue.group, jeepRed.group, jeepSchool.group, jeepRozhok.group,
+    jeepPochinki.group, jeepFarm.group, jeepYasnaya.group, jeepCoast.group
+  );
+  const vehicles = [
+    jeepBlue, jeepRed, jeepSchool, jeepRozhok,
+    jeepPochinki, jeepFarm, jeepYasnaya, jeepCoast
+  ];
+
+  // 16. BALANCED SPAWN & DROP POINTS FOR TEAMS & FFA
+  spawnPoints.push(
+    // Blue Team Drop Zone (South - Pochinki)
+    { x: -35, y: 0, z: -120, team: 'blue' }, { x: -45, y: 0, z: -100, team: 'blue' },
+    { x: -25, y: 0, z: -140, team: 'blue' }, { x: -55, y: 0, z: -125, team: 'blue' },
+    { x: -80, y: 0, z: -60, team: 'blue' },  { x: -150, y: 0, z: -60, team: 'blue' },
+    { x: 120, y: 0, z: -550, team: 'blue' }, { x: -160, y: 0, z: -750, team: 'blue' },
+    // Red Team Drop Zone (North - Rozhok / Yasnaya)
+    { x: 30, y: 0, z: 820, team: 'red' },   { x: 45, y: 0, z: 800, team: 'red' },
+    { x: 20, y: 0, z: 840, team: 'red' },   { x: 50, y: 0, z: 825, team: 'red' },
+    { x: 80, y: 0, z: 760, team: 'red' },   { x: 120, y: 0, z: 760, team: 'red' },
+    { x: 260, y: 0, z: 750, team: 'red' },  { x: 300, y: 0, z: 840, team: 'red' },
+    // FFA / Solo Drop Points
+    { x: 350, y: 0, z: 420 }, { x: 350, y: 11, z: 420 },
+    { x: 460, y: 0, z: 390 }, { x: -340, y: 0, z: -10 },
+    { x: 0, y: 0, z: 150 },   { x: -120, y: 0, z: 40 },
+    { x: 140, y: 0, z: -500 }
+  );
+
+  return {
+    group: mapGroup,
+    colliders: colliders,
+    jumpPads: [],
+    lootItems: lootItems,
+    vehicles: vehicles,
+    spawnPoints: spawnPoints
+  };
+}
+window.createPubgSurvivalMap = createPubgSurvivalMap;
+window.createCyberCityMap = createCyberCityMap;
+
+window.createDeathCrateModel = createDeathCrateModel;
+window.createMilitaryCargoPlane = createMilitaryCargoPlane;
+window.createParachuteModel = createParachuteModel;
 window.models = {
+  createDeathCrateModel: () => createDeathCrateModel(),
+  createMilitaryCargoPlane: () => createMilitaryCargoPlane(),
+  createParachuteModel: () => createParachuteModel(),
+  createSilencerModel: () => createSilencerModel(),
   createAK47Model: (isVm, skin) => createAuthenticAK47Model(isVm, skin),
   createAssaultRifleModel: (isVm, skin) => createAssaultRifleModel(isVm, skin),
   createBurstRifleModel: (isVm, skin) => createBurstRifleModel(isVm, skin),
@@ -2812,6 +4454,8 @@ window.models = {
   createSciFiArena: () => createVeckArenaMap(),
   createVeckArenaMap: () => createVeckArenaMap(),
   createCyberCityMap: () => createCyberCityMap(),
-  createLobbyEnvironment: () => createLobbyEnvironment()
+  createLobbyEnvironment: () => createLobbyEnvironment(),
+  createPubgJeepVehicle: (x, z, angle) => createPubgJeepVehicle(x, z, angle),
+  createPubgSurvivalMap: () => createPubgSurvivalMap()
 };
 

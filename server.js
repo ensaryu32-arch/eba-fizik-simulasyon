@@ -968,6 +968,9 @@ app.post('/api/shop/topup', authenticateUser, (req, res) => {
     exists: true,
     roomId: room.id,
     mode: room.mode,
+    map: room.map || 'arena',
+    duration: room.duration || 900,
+    bots: room.bots || 'none',
     isPrivate: room.isPrivate,
     playerCount: room.players.size,
     maxPlayers: room.maxPlayers
@@ -976,7 +979,7 @@ app.post('/api/shop/topup', authenticateUser, (req, res) => {
 
 // 11. CREATE A NEW PRIVATE ROOM
 app.post('/api/rooms/create', (req, res) => {
-  const { mode, maxPlayers } = req.body;
+  const { mode, maxPlayers, map, duration, bots } = req.body;
   const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
   const roomId = `VECK-${randomSuffix}`;
 
@@ -984,8 +987,11 @@ app.post('/api/rooms/create', (req, res) => {
     id: roomId,
     name: `Özel Oda (${roomId})`,
     mode: mode || 'FFA',
+    map: map || 'pubg',
+    duration: Number(duration) || 900,
+    bots: bots || 'none',
     isPrivate: true,
-    maxPlayers: maxPlayers || 10,
+    maxPlayers: Number(maxPlayers) || 16,
     players: new Map()
   };
 
@@ -995,25 +1001,21 @@ app.post('/api/rooms/create', (req, res) => {
     success: true,
     roomId: roomId,
     mode: room.mode,
+    map: room.map,
+    duration: room.duration,
+    bots: room.bots,
+    maxPlayers: room.maxPlayers,
     message: `Oda başarıyla oluşturuldu! Arkadaşlarınızın katılması için Oda ID: ${roomId}`
   });
 });
 
 const publicDir = fs.existsSync(path.join(__dirname, 'public')) ? path.join(__dirname, 'public') : __dirname;
 
-// Script rewrite helper: if requested /js/game.js and js folder does not exist, serve from root
-app.use((req, res, next) => {
-  if (req.url.startsWith('/js/')) {
-    const withoutJs = req.url.replace('/js/', '/');
-    const localCheck = path.join(__dirname, req.url);
-    if (!fs.existsSync(localCheck)) {
-      req.url = withoutJs;
-    }
-  }
-  next();
-});
-
+// Serve static assets accurately from public and public/js
 app.use(express.static(publicDir));
+if (fs.existsSync(path.join(publicDir, 'js'))) {
+  app.use('/js', express.static(path.join(publicDir, 'js')));
+}
 app.use(express.static(__dirname));
 
 // ==========================================
@@ -1172,7 +1174,13 @@ wss.on('connection', (ws) => {
         });
         ws.roomId = currentRoomId;
 
+        if (!targetRoom.hostId) {
+          targetRoom.hostId = playerId;
+        }
+
         playerData.name = data.name || playerData.name;
+        playerData.team = data.team || (targetRoom.players.size % 2 === 0 ? 'blue' : 'red');
+        playerData.isHost = (targetRoom.hostId === playerId);
         if (data.x !== undefined) playerData.x = data.x;
         if (data.y !== undefined) playerData.y = data.y;
         if (data.z !== undefined) playerData.z = data.z;
@@ -1198,13 +1206,51 @@ wss.on('connection', (ws) => {
           roomId: currentRoomId,
           isPrivate: targetRoom.isPrivate,
           mode: targetRoom.mode,
+          map: targetRoom.map || 'arena',
+          duration: targetRoom.duration || 900,
+          bots: targetRoom.bots || 'none',
+          maxPlayers: targetRoom.maxPlayers || 16,
+          hostId: targetRoom.hostId,
+          isHost: (targetRoom.hostId === playerId),
+          myTeam: playerData.team,
           players: Array.from(targetRoom.players.values())
         }));
 
         broadcastToRoom(currentRoomId, {
           type: 'player_joined',
-          player: playerData
+          player: playerData,
+          hostId: targetRoom.hostId,
+          players: Array.from(targetRoom.players.values())
         }, ws);
+      }
+
+      if (data.type === 'switch_team') {
+        const room = rooms.get(currentRoomId);
+        if (room && room.players.has(playerId)) {
+          const p = room.players.get(playerId);
+          p.team = data.team; // 'blue' or 'red'
+          broadcastToRoom(currentRoomId, {
+            type: 'team_switched',
+            playerId: playerId,
+            team: data.team,
+            players: Array.from(room.players.values())
+          });
+        }
+      }
+
+      if (data.type === 'room_start_match') {
+        const room = rooms.get(currentRoomId);
+        if (room) {
+          room.status = 'in_game';
+          broadcastToRoom(currentRoomId, {
+            type: 'match_started',
+            roomId: currentRoomId,
+            mode: data.mode || room.mode || 'TDM',
+            map: data.map || room.map || 'pubg',
+            teams: data.teams,
+            bots: data.bots
+          });
+        }
       }
 
       if (data.type === 'move') {
@@ -1268,6 +1314,34 @@ wss.on('connection', (ws) => {
           x: data.x,
           y: data.y,
           z: data.z
+        }, ws);
+      }
+
+      if (data.type === 'vehicle_update') {
+        broadcastToRoom(currentRoomId, {
+          type: 'vehicle_update',
+          vehicleIndex: data.vehicleIndex,
+          x: data.x, y: data.y, z: data.z,
+          angle: data.angle,
+          steerAngle: data.steerAngle,
+          speed: data.speed,
+          driverId: playerId
+        }, ws);
+      }
+
+      if (data.type === 'vehicle_honk') {
+        broadcastToRoom(currentRoomId, {
+          type: 'vehicle_honk',
+          vehicleIndex: data.vehicleIndex,
+          driverId: playerId
+        }, ws);
+      }
+
+      if (data.type === 'loot_picked') {
+        broadcastToRoom(currentRoomId, {
+          type: 'loot_picked',
+          lootIndex: data.lootIndex,
+          pickerId: playerId
         }, ws);
       }
 

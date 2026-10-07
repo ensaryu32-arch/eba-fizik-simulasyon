@@ -27,7 +27,11 @@ const state = {
   isLoggedIn: false,
   currentSlot: 1, // 1: Primary, 2: Secondary, 3: Knife, 4: Grenade
   prevSlot: 2,
+  bandages: 0,
+  maxPlayers: 16,
+  botsEnabled: true,
   slotAmmo: { 1: 30, 2: 15, 3: 1, 4: 2 },
+  reserveAmmo: { 1: 60, 2: 30, 4: 2 },
   equippedGuns: {
     1: 'AK-47',
     2: 'Pistol',
@@ -84,7 +88,8 @@ const state = {
   score: 0,
   ping: 18,
   matchSeconds: 10 * 60, // 10 minutes (600 seconds)
-  isTabOpen: false
+  isTabOpen: false,
+  hasSilencer: false
 };
 
 const ALL_WEAPONS_CATALOG = {
@@ -138,10 +143,27 @@ let lastShotTime = 0;
 
 // Three.js Objects
 let scene, camera, renderer;
-let lobbyEnv, arenaData, cyberCityData;
-let currentSelectedMap = 'arena'; // 'arena' or 'cyber_city'
+let lobbyEnv, arenaData, cyberCityData, pubgMapData;
+let currentSelectedMap = 'pubg'; // Default to PUBG Survival Map (Large Map & Car!)
 let localAvatar = null;
 let deployGraceTimer = 0;
+let currentDrivenVehicle = null;
+let currentInspectedCrate = null;
+const skydiveState = {
+  active: false,
+  inPlane: false,
+  planeTimer: 0,
+  bluePlaneMesh: null,
+  redPlaneMesh: null,
+  bluePlanePos: new THREE.Vector3(),
+  redPlanePos: new THREE.Vector3(),
+  parachuteMesh: null,
+  botParachutes: []
+};
+
+let vehCamYaw = 0;
+let vehCamPitch = 0.2;
+window.activeInteractionTarget = null;
 
 // Reusable math objects to eliminate Garbage Collection lag
 const _tempHitVec = new THREE.Vector3();
@@ -149,7 +171,9 @@ const _tempRayDir = new THREE.Vector3();
 const _tempRay = new THREE.Ray();
 
 function getActiveMapData() {
-  return currentSelectedMap === 'cyber_city' && cyberCityData ? cyberCityData : arenaData;
+  if (currentSelectedMap === 'pubg' && pubgMapData) return pubgMapData;
+  if (currentSelectedMap === 'cyber_city' && cyberCityData) return cyberCityData;
+  return arenaData;
 }
 
 function getActiveColliders() {
@@ -163,10 +187,15 @@ function getActiveJumpPads() {
 }
 
 window.toggleSelectedMap = function() {
-  currentSelectedMap = (currentSelectedMap === 'arena') ? 'cyber_city' : 'arena';
+  if (currentSelectedMap === 'pubg') currentSelectedMap = 'arena';
+  else if (currentSelectedMap === 'arena') currentSelectedMap = 'cyber_city';
+  else currentSelectedMap = 'pubg';
+
   const el = document.getElementById('current-map-name');
   if (el) {
-    el.textContent = currentSelectedMap === 'cyber_city' ? 'Map: Cyber City (Neon Sci-Fi)' : 'Map: Arena (Veck Classic)';
+    if (currentSelectedMap === 'pubg') el.textContent = 'Map: PUBG Survival (Büyük Harita & Araba)';
+    else if (currentSelectedMap === 'cyber_city') el.textContent = 'Map: Cyber City (Neon Sci-Fi)';
+    else el.textContent = 'Map: Arena (Veck Classic)';
   }
 };
 
@@ -177,6 +206,7 @@ let activeGun = null;
 const bots = [];
 const remotePlayers = new Map();
 const activeGrenades = [];
+const activeDeathCrates = [];
 
 // Physics
 const velocity = new THREE.Vector3();
@@ -199,12 +229,13 @@ function init() {
   const container = document.getElementById('canvas-container');
 
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x2196f3);
-  scene.fog = new THREE.FogExp2(0x2196f3, 0.002);
+  // Sleek Sci-Fi Dark Navy for Lobby Hangar (Prevents blinding blank blue screen!)
+  scene.background = new THREE.Color(0x0a0e1a);
+  scene.fog = new THREE.FogExp2(0x0a0e1a, 0.012);
 
-  camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 900);
+  camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 15000);
   camera.rotation.order = 'YXZ';
-  camera.position.set(0, 2.2, 4.2);
+  camera.position.set(0, 2.1, 4.6);
 
   renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -214,7 +245,7 @@ function init() {
   container.appendChild(renderer.domElement);
 
   // Lighting
-  const ambient = new THREE.AmbientLight(0xffffff, 0.75);
+  const ambient = new THREE.AmbientLight(0xffffff, 0.8);
   scene.add(ambient);
 
   const sun = new THREE.DirectionalLight(0xffffff, 0.95);
@@ -231,26 +262,68 @@ function init() {
   sun.shadow.camera.bottom = -150;
   scene.add(sun);
 
-  // Environments
-  lobbyEnv = createLobbyEnvironment();
-  scene.add(lobbyEnv);
-  arenaData = createVeckArenaMap();
-  arenaData.group.visible = false;
-  scene.add(arenaData.group);
-
-  if (window.models && window.models.createCyberCityMap) {
-    cyberCityData = window.models.createCyberCityMap();
-    cyberCityData.group.visible = false;
-    scene.add(cyberCityData.group);
+  // 1. Authentic Veck.io Sci-Fi Lobby Hangar & Pedestals
+  try {
+    const createLobby = (window.models && window.models.createLobbyEnvironment) || (typeof createLobbyEnvironment === 'function' ? createLobbyEnvironment : null);
+    if (createLobby) {
+      lobbyEnv = createLobby();
+      scene.add(lobbyEnv);
+    }
+  } catch (err) {
+    console.error("Lobby environment creation error:", err);
   }
 
-  // Lobby Avatar with Iconic Man Face
-  localAvatar = createBlockyCharacter({
-    shirtColor: 0x6c4bf6,
-    pantsColor: 0x1f2438,
-    isEnemy: false
-  });
-  scene.add(localAvatar.group);
+  // 2. Battle Maps (safely loaded in background, hidden until match starts)
+  try {
+    const createArena = (window.models && window.models.createVeckArenaMap) || (typeof createVeckArenaMap === 'function' ? createVeckArenaMap : null);
+    if (createArena) {
+      arenaData = createArena();
+      arenaData.group.visible = false;
+      scene.add(arenaData.group);
+    }
+  } catch (err) {
+    console.error("Veck arena creation error:", err);
+  }
+
+  try {
+    if (window.models && window.models.createCyberCityMap) {
+      cyberCityData = window.models.createCyberCityMap();
+      cyberCityData.group.visible = false;
+      scene.add(cyberCityData.group);
+    }
+  } catch (err) {
+    console.error("Cyber city creation error:", err);
+  }
+
+  try {
+    if (window.models && window.models.createPubgSurvivalMap) {
+      pubgMapData = window.models.createPubgSurvivalMap();
+      pubgMapData.group.visible = false;
+      scene.add(pubgMapData.group);
+    }
+  } catch (err) {
+    console.error("Pubg map creation error:", err);
+  }
+
+  // 3. Lobby Player Avatar (Standing prominently on Center Podium with Weapon & Nameplate)
+  try {
+    const createChar = (window.models && window.models.createBlockyCharacter) || (typeof createBlockyCharacter === 'function' ? createBlockyCharacter : null);
+    if (createChar) {
+      localAvatar = createChar({
+        name: state.myName || 'Ensar',
+        level: 5,
+        teamColor: 'blue',
+        shirtColor: 0x6c4bf6,
+        pantsColor: 0x1f2438,
+        weaponType: 'ak47',
+        isEnemy: false
+      });
+      localAvatar.group.position.set(0, 0.32, 0);
+      scene.add(localAvatar.group);
+    }
+  } catch (err) {
+    console.error("Local avatar creation error:", err);
+  }
 
   // Build All 3D Viewmodels & Attach to Camera
   viewmodels['AK-47'] = window.models.createAK47Model(true, state.equippedWeaponSkins['AK-47']);
@@ -336,6 +409,24 @@ function initWebSocket() {
 
       if (data.type === 'room_joined') {
         state.myPlayerId = data.id;
+        if (data.map) currentSelectedMap = data.map;
+        if (data.duration) state.matchSeconds = Number(data.duration);
+        if (data.bots !== undefined) state.botsEnabled = (data.bots === 'with_bots');
+        if (data.maxPlayers) state.maxPlayers = Number(data.maxPlayers);
+
+        if (window.pubgLobbyState && window.pubgLobbyState.active) {
+          window.pubgLobbyState.isHost = !!data.isHost;
+          if (data.players && Array.isArray(data.players)) {
+            window.pubgLobbyState.players = data.players.map(p => ({
+              id: p.id,
+              name: p.name || 'Oyuncu',
+              team: p.team || 'blue',
+              isHost: !!p.isHost,
+              isBot: false
+            }));
+            if (typeof renderPubgLobbySlots === 'function') renderPubgLobbySlots();
+          }
+        }
 
         // Clean up previous remote players
         remotePlayers.forEach(rp => {
@@ -351,12 +442,44 @@ function initWebSocket() {
             }
           });
         }
+        if (state.isTabOpen) updateScoreboardUI();
       }
 
       if (data.type === 'player_joined') {
+        if (window.pubgLobbyState && window.pubgLobbyState.active && data.player) {
+          if (!window.pubgLobbyState.players.some(p => p.id === data.player.id)) {
+            window.pubgLobbyState.players.push({
+              id: data.player.id,
+              name: data.player.name || 'Oyuncu',
+              team: data.player.team || 'red',
+              isHost: !!data.player.isHost,
+              isBot: false
+            });
+            if (typeof renderPubgLobbySlots === 'function') renderPubgLobbySlots();
+          }
+        }
         if (data.player && data.player.id !== state.myPlayerId) {
           createRemotePlayer(data.player);
           showGlobalNotification(`🎮 "${data.player.name || 'Oyuncu'}" odaya katıldı!`, 'info');
+          if (state.isTabOpen) updateScoreboardUI();
+        }
+      }
+
+      if (data.type === 'team_switched') {
+        if (window.pubgLobbyState && window.pubgLobbyState.active) {
+          const target = window.pubgLobbyState.players.find(p => p.id === data.id);
+          if (target) {
+            target.team = data.team;
+            if (typeof renderPubgLobbySlots === 'function') renderPubgLobbySlots();
+          }
+        }
+      }
+
+      if (data.type === 'match_started') {
+        if (window.pubgLobbyState && window.pubgLobbyState.active) {
+          if (typeof launchPubgMatchFromLobby === 'function') {
+            launchPubgMatchFromLobby();
+          }
         }
       }
 
@@ -374,6 +497,7 @@ function initWebSocket() {
         if (rp) {
           if (rp.group) scene.remove(rp.group);
           remotePlayers.delete(data.id);
+          if (state.isTabOpen) updateScoreboardUI();
         }
       }
 
@@ -454,12 +578,51 @@ function initWebSocket() {
           if (scoreEl) scoreEl.textContent = state.kills;
           triggerHitmarker();
           if (window.soundFX && window.soundFX.playKillSound) window.soundFX.playKillSound();
+        } else {
+          const killerRp = remotePlayers.get(data.attackerId);
+          if (killerRp) {
+            killerRp.kills = (killerRp.kills || 0) + 1;
+            killerRp.score = (killerRp.score || 0) + (data.isHeadshot ? 150 : 100);
+          }
         }
 
         const rp = remotePlayers.get(data.targetId);
         if (rp) {
           rp.isDead = true;
+          rp.deaths = (rp.deaths || 0) + 1;
           if (rp.group) rp.group.visible = false;
+        }
+        if (state.isTabOpen) updateScoreboardUI();
+      }
+
+      if (data.type === 'vehicle_update') {
+        const activeMap = getActiveMapData();
+        if (activeMap && activeMap.vehicles && activeMap.vehicles[data.vehicleIndex]) {
+          const v = activeMap.vehicles[data.vehicleIndex];
+          if (!v.isDriven) {
+            v.pos.set(data.x, data.y, data.z);
+            v.group.position.copy(v.pos);
+            v.angle = data.angle;
+            v.group.rotation.y = data.angle;
+            v.speed = data.speed;
+            if (v.wheels && v.wheels.flPivot && v.wheels.frPivot) {
+              v.wheels.flPivot.rotation.y = data.steerAngle || 0;
+              v.wheels.frPivot.rotation.y = data.steerAngle || 0;
+            }
+          }
+        }
+      }
+
+      if (data.type === 'vehicle_honk') {
+        if (window.soundFX && window.soundFX.playCarHonk) window.soundFX.playCarHonk();
+      }
+
+      if (data.type === 'loot_picked') {
+        const activeMap = getActiveMapData();
+        if (activeMap && activeMap.lootItems && activeMap.lootItems[data.lootIndex]) {
+          const item = activeMap.lootItems[data.lootIndex];
+          item.collected = true;
+          if (item.mesh) item.mesh.visible = false;
         }
       }
 
@@ -549,7 +712,13 @@ function createRemotePlayer(p) {
   avatar.targetHeadPitch = p.headPitch || 0;
   avatar.health = 150;
   avatar.maxHealth = 150;
+  avatar.id = p.id;
   avatar.name = p.name || 'Oyuncu';
+  avatar.level = p.level || 7;
+  avatar.kills = p.kills || 0;
+  avatar.deaths = p.deaths || 0;
+  avatar.score = p.score || 0;
+  avatar.ping = p.ping || Math.floor(16 + Math.random() * 20);
   avatar.walkPhase = 0;
   avatar.isDead = false;
 
@@ -562,35 +731,69 @@ function spawnBots() {
   bots.forEach(b => scene.remove(b.avatar.group));
   bots.length = 0;
 
-  if (state.isPrivateRoom) return; // NO BOTS IN PRIVATE ROOM MATCHES!
+  if (state.isPrivateRoom && !state.botsEnabled) return; // NO BOTS IN PRIVATE ROOM UNLESS WITH BOTS SELECTED!
 
-  const botData = [
-    { name: 'Vortex [PRO]', level: 25, color: 0x0284c7, team: 'blue', weapon: 'ak47', kills: 0, deaths: 0, score: 0, ping: 24, x: -28, z: -42 },
-    { name: 'RedFury [VIP]', level: 35, color: 0xdc2626, team: 'red', weapon: 'ak47', kills: 0, deaths: 0, score: 0, ping: 31, x: 28, z: 42 },
-    { name: 'GhostSniper [ELITE]', level: 48, color: 0x0284c7, team: 'blue', weapon: 'sniper', kills: 0, deaths: 0, score: 0, ping: 19, x: -60, z: 32 },
-    { name: 'CyberWolf_TR', level: 28, color: 0xdc2626, team: 'red', weapon: 'burst', kills: 0, deaths: 0, score: 0, ping: 42, x: 60, z: -32 },
-    { name: 'TitanHeavy [JUGG]', level: 50, color: 0x0284c7, team: 'blue', weapon: 'minigun', kills: 0, deaths: 0, score: 0, ping: 27, x: -75, z: -25 },
-    { name: 'NeonPhantom', level: 31, color: 0xdc2626, team: 'red', weapon: 'pistol', kills: 0, deaths: 0, score: 0, ping: 35, x: 75, z: 25 }
+  const mapData = getActiveMapData();
+  const spawnPool = (mapData && mapData.spawnPoints && mapData.spawnPoints.length > 0)
+    ? [...mapData.spawnPoints]
+    : [...SPAWN_POINTS];
+
+  // Shuffle spawn points so bots and player are spread across the entire map
+  for (let i = spawnPool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [spawnPool[i], spawnPool[j]] = [spawnPool[j], spawnPool[i]];
+  }
+
+  const botRoster = [
+    { name: 'Vortex [PRO]', level: 25, weapon: 'ak47', kills: 0, deaths: 0, score: 0, ping: 24 },
+    { name: 'RedFury [VIP]', level: 35, weapon: 'ak47', kills: 0, deaths: 0, score: 0, ping: 31 },
+    { name: 'GhostSniper [ELITE]', level: 48, weapon: 'sniper', kills: 0, deaths: 0, score: 0, ping: 19 },
+    { name: 'CyberWolf_TR', level: 28, weapon: 'burst', kills: 0, deaths: 0, score: 0, ping: 42 },
+    { name: 'TitanHeavy [JUGG]', level: 50, weapon: 'minigun', kills: 0, deaths: 0, score: 0, ping: 27 },
+    { name: 'NeonPhantom', level: 31, weapon: 'pistol', kills: 0, deaths: 0, score: 0, ping: 35 },
+    { name: 'ShadowHunter', level: 42, weapon: 'sniper', kills: 0, deaths: 0, score: 0, ping: 28 },
+    { name: 'BalkanBeast', level: 39, weapon: 'ak47', kills: 0, deaths: 0, score: 0, ping: 33 }
   ];
 
-  botData.forEach((b) => {
-    const isFriendly = (state.matchType === 'TDM' && b.team === 'blue');
+  botRoster.forEach((b, idx) => {
+    // Team battle: TDM, 2v2, Squad, or any team match
+    const isTeamMode = (state.matchType === 'TDM' || state.matchType === '2v2' || state.matchType === 'Squad');
+    const myTeam = state.team || 'blue';
+    const enemyTeam = (myTeam === 'blue') ? 'red' : 'blue';
+    // In team mode, evenly distribute bots between blue and red
+    const assignedTeam = isTeamMode ? (idx % 2 === 0 ? myTeam : enemyTeam) : 'red';
+    const isFriendly = isTeamMode && (assignedTeam === myTeam);
+
+    let spawnX, spawnZ;
+    if (isFriendly) {
+      // TEAMMATES SPAWN RIGHT BESIDE THE PLAYER (within 3 to 6 meters!)
+      const angle = (idx * Math.PI / 2) + Math.random() * 0.5;
+      const dist = 3.5 + Math.random() * 2.5;
+      spawnX = playerPos.x + Math.sin(angle) * dist;
+      spawnZ = playerPos.z + Math.cos(angle) * dist;
+    } else {
+      const sp = isTeamMode ? getRandomSpawn(enemyTeam) : spawnPool[idx % spawnPool.length];
+      spawnX = (sp ? sp.x : 30) + (Math.random() - 0.5) * 6;
+      spawnZ = (sp ? sp.z : 820) + (Math.random() - 0.5) * 6;
+    }
+
     const avatar = createBlockyCharacter({
       name: b.name,
       level: b.level,
-      shirtColor: isFriendly ? 0x0284c7 : (b.team === 'blue' ? 0x3b82f6 : 0xdc2626),
+      shirtColor: isFriendly ? 0x0284c7 : 0xdc2626,
       pantsColor: 0x1f2438,
       isEnemy: !isFriendly,
       isBot: true,
-      teamColor: b.team,
+      teamColor: isFriendly ? 'blue' : 'red',
       weaponType: b.weapon
     });
-    avatar.group.position.set(b.x, 0, b.z);
+    avatar.group.position.set(spawnX, 0, spawnZ);
     scene.add(avatar.group);
 
     bots.push({
       name: b.name,
-      team: b.team,
+      team: assignedTeam,
+      isFriendly: isFriendly,
       level: b.level,
       weapon: b.weapon,
       avatar: avatar,
@@ -601,7 +804,12 @@ function spawnBots() {
       deaths: b.deaths,
       score: b.score,
       ping: b.ping,
-      targetPos: new THREE.Vector3(b.x, 0, b.z),
+      targetPos: new THREE.Vector3(spawnX, 0, spawnZ),
+      targetLanding: (assignedTeam === 'blue')
+        ? new THREE.Vector3(-35 + (Math.random() - 0.5) * 40, 0, -120 + (Math.random() - 0.5) * 40)
+        : ((assignedTeam === 'red')
+          ? new THREE.Vector3(30 + (Math.random() - 0.5) * 40, 0, 820 + (Math.random() - 0.5) * 40)
+          : new THREE.Vector3(spawnX, 0, spawnZ)),
       velocity: new THREE.Vector3(0, 0, 0),
       vy: 0,
       isGrounded: true,
@@ -626,13 +834,22 @@ function isLineOfSightBlocked(origin, targetPos) {
 
   _tempRayDir.subVectors(targetPos, origin);
   const maxDist = _tempRayDir.length();
+  if (maxDist < 0.2) return false;
   _tempRayDir.normalize();
 
   _tempRay.origin.copy(origin);
   _tempRay.direction.copy(_tempRayDir);
 
+  const minX = Math.min(origin.x, targetPos.x) - 1.0;
+  const maxX = Math.max(origin.x, targetPos.x) + 1.0;
+  const minZ = Math.min(origin.z, targetPos.z) - 1.0;
+  const maxZ = Math.max(origin.z, targetPos.z) + 1.0;
+
   for (let i = 0; i < colliders.length; i++) {
     const c = colliders[i];
+    // Fast 2D AABB bounding check to skip distant colliders
+    if (c.maxX < minX || c.minX > maxX || c.maxZ < minZ || c.minZ > maxZ) continue;
+
     if (!c.box3) {
       c.box3 = new THREE.Box3(
         new THREE.Vector3(c.minX, c.minY, c.minZ),
@@ -659,7 +876,8 @@ function checkAndResolveCollisions(pos, radius = 0.75) {
     const inZ = (pos.z + radius * 0.7 > c.minZ && pos.z - radius * 0.7 < c.maxZ);
 
     if (inX && inZ) {
-      if (pos.y >= c.maxY - 0.35) {
+      // Step-up threshold: allows smooth climbing up stair steps up to 0.55m high!
+      if (pos.y >= c.maxY - 0.55) {
         if (c.maxY > highestGroundY) {
           highestGroundY = c.maxY;
         }
@@ -875,6 +1093,10 @@ window.addEventListener('keydown', (e) => {
 });
 
 window.openChangeGunsModal = function(isPreMatch = false) {
+  if (currentSelectedMap === 'pubg') {
+    showGlobalNotification('❌ PUBG modunda silahlar evlerden ve ölü çantalarından toplanır!', 'warning');
+    return;
+  }
   state.isPreMatchLoadout = isPreMatch;
   window.soundFX.playClick();
   const pauseOverlay = document.getElementById('pause-overlay');
@@ -943,13 +1165,340 @@ window.closeMatchEndModal = function() {
   document.getElementById('match-end-modal').style.display = 'none';
 };
 
-function getRandomSpawn() {
-  const sp = SPAWN_POINTS[Math.floor(Math.random() * SPAWN_POINTS.length)];
+function getRandomSpawn(team = null) {
+  const mapData = getActiveMapData();
+  let pool = (mapData && mapData.spawnPoints && mapData.spawnPoints.length > 0) ? mapData.spawnPoints : SPAWN_POINTS;
+
+  // In Team Deathmatch (TDM): Team Blue spawns at South Base, Team Red at North Base
+  if (state.matchType === 'TDM' && team) {
+    if (team === 'blue') {
+      const bluePool = pool.filter(sp => sp.z < 0);
+      if (bluePool.length > 0) pool = bluePool;
+    } else if (team === 'red') {
+      const redPool = pool.filter(sp => sp.z >= 0);
+      if (redPool.length > 0) pool = redPool;
+    }
+  }
+
+  const sp = pool[Math.floor(Math.random() * pool.length)];
   return {
-    x: sp.x + (Math.random() - 0.5) * 8,
-    z: sp.z + (Math.random() - 0.5) * 8
+    x: sp.x + (Math.random() - 0.5) * 6,
+    z: sp.z + (Math.random() - 0.5) * 6
   };
 }
+
+// Vehicle & Loot Ground Interaction Helper Functions
+function enterVehicle(veh) {
+  if (!veh || currentDrivenVehicle) return;
+  currentDrivenVehicle = veh;
+  veh.isDriven = true;
+  vehCamYaw = 0;
+  vehCamPitch = 0.2;
+
+  const promptEl = document.getElementById('interaction-prompt');
+  if (promptEl) promptEl.style.display = 'none';
+
+  const vehHud = document.getElementById('vehicle-hud');
+  if (vehHud) vehHud.style.display = 'block';
+
+  // Hide weapon viewmodel while driving
+  if (activeGun) activeGun.visible = false;
+  if (window.soundFX && window.soundFX.playClick) window.soundFX.playClick();
+  showGlobalNotification('🚙 PUBG UAZ Aracına Bindin! [W/S/A/D] ile sür, Fare ile Etrafa Bak, [SPACE] El Freni, [SHIFT] Turbo, [H] Korna, [E] İn', 'info');
+}
+
+function exitVehicle() {
+  if (!currentDrivenVehicle) return;
+  const veh = currentDrivenVehicle;
+
+  // Step out to the side
+  const exitAngle = veh.angle + Math.PI / 2;
+  playerPos.set(
+    veh.pos.x + Math.sin(exitAngle) * 3.6,
+    veh.pos.y,
+    veh.pos.z + Math.cos(exitAngle) * 3.6
+  );
+  velocity.set(0, 0, 0);
+  playerRotY = veh.angle + vehCamYaw;
+  headPitch = vehCamPitch;
+
+  veh.isDriven = false;
+  currentDrivenVehicle = null;
+
+  const vehHud = document.getElementById('vehicle-hud');
+  if (vehHud) vehHud.style.display = 'none';
+
+  updateViewmodelVisibility();
+  if (window.soundFX && window.soundFX.playClick) window.soundFX.playClick();
+}
+
+function pickupLoot(loot, index) {
+  if (!loot || loot.collected) return;
+  loot.collected = true;
+  if (loot.mesh) loot.mesh.visible = false;
+
+  if (loot.type === 'bandage') {
+    state.bandages = (state.bandages || 0) + 1;
+    const countBadge = document.getElementById('bandage-count-badge');
+    if (countBadge) countBadge.textContent = state.bandages;
+    if (window.soundFX && window.soundFX.playLootPickup) window.soundFX.playLootPickup();
+    showGlobalNotification(`🩹 Bandaj çantaya eklendi! Toplam: ${state.bandages} ([5] Tuşu ile Can Bas)`, 'success');
+  } else if (loot.type === 'medkit') {
+    state.health = 150;
+    updateHealthUI();
+    if (window.soundFX && window.soundFX.playLootPickup) window.soundFX.playLootPickup();
+    showGlobalNotification('💊 İlk Yardım Çantası kullanıldı! Can 150/150!', 'success');
+  } else if (loot.type === 'silencer') {
+    state.hasSilencer = true;
+    if (window.soundFX && window.soundFX.playSilencerAttach) {
+      window.soundFX.playSilencerAttach();
+    } else if (window.soundFX && window.soundFX.playLootPickup) {
+      window.soundFX.playLootPickup();
+    }
+    if (activeGun) attachSilencerToViewmodel(activeGun);
+    updateAmmoUI();
+    showGlobalNotification('🔇 Susturucu Kuşandı! Silah sesleri kısıldı ve namlu ateşi gizlendi.', 'success');
+  } else if (loot.type === 'weapon') {
+    // Any weapon can be equipped in slot 1 or slot 2!
+    let targetSlot = 1;
+    if (!state.equippedGuns[1]) {
+      targetSlot = 1;
+    } else if (!state.equippedGuns[2]) {
+      targetSlot = 2;
+    } else {
+      targetSlot = (state.currentSlot === 2) ? 2 : 1;
+    }
+
+    state.equippedGuns[targetSlot] = loot.gunName;
+    const wInfo = ALL_WEAPONS_CATALOG[loot.gunName] || ALL_WEAPONS_CATALOG['AK-47'];
+
+    // Limited Ammo: grant mag ammo + reserve ammo!
+    const startingMag = wInfo.maxAmmo || 30;
+    const startingReserve = (loot.gunName === 'Sniper') ? 15 : ((loot.gunName === 'Shawty') ? 18 : 60);
+
+    if (!state.slotAmmo) state.slotAmmo = { 1: 0, 2: 0, 3: 1, 4: 0 };
+    if (!state.reserveAmmo) state.reserveAmmo = { 1: 0, 2: 0, 4: 0 };
+
+    state.slotAmmo[targetSlot] = startingMag;
+    state.reserveAmmo[targetSlot] = startingReserve;
+    state.ammo = startingMag;
+
+    // Update slot box icon and tooltip in HUD
+    const slotEl = document.getElementById(`slot-${targetSlot}`);
+    if (slotEl) {
+      slotEl.innerHTML = wInfo.icon || '🔫';
+      slotEl.title = `Key ${targetSlot}: ${wInfo.name}`;
+    }
+
+    switchSlot(targetSlot);
+
+    if (state.hasSilencer && activeGun) {
+      attachSilencerToViewmodel(activeGun);
+    }
+    if (window.soundFX && window.soundFX.playLootPickup) window.soundFX.playLootPickup();
+    showGlobalNotification(`${wInfo.icon || '🔫'} ${loot.gunName} alındı! (${targetSlot}. Slot, ${startingMag} Mermi + ${startingReserve} Yedek)`, 'success');
+  }
+
+  updateSlotBarVisibility();
+  updateBackpackUI();
+
+  // Network sync
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify({ type: 'loot_picked', lootIndex: index }));
+  }
+}
+
+window.useBandage = function() {
+  if (state.mode !== 'battle' || state.isDead) return;
+  if (!state.bandages || state.bandages <= 0) {
+    showGlobalNotification('❌ Çantada hiç bandaj yok! Haritadaki evlerden toplayabilirsin.', 'warning');
+    return;
+  }
+  if (state.health >= 150) {
+    showGlobalNotification('Canın zaten tam dolu!', 'info');
+    return;
+  }
+  state.bandages--;
+  state.health = Math.min(150, state.health + 45);
+  updateHealthUI();
+  const countBadge = document.getElementById('bandage-count-badge');
+  if (countBadge) countBadge.textContent = state.bandages;
+  if (window.soundFX && window.soundFX.playBandage) window.soundFX.playBandage();
+  showGlobalNotification(`🩹 Bandaj uygulandı! Can: ${state.health}/150 (+45)`, 'success');
+};
+
+// PUBG SKYDIVE & PARACHUTE FLIGHT SYSTEM
+function ejectPlayerFromPlane() {
+  if (!skydiveState.active || !skydiveState.inPlane) return;
+  skydiveState.inPlane = false;
+
+  // Parachute model attached above player
+  if (window.models && window.models.createParachuteModel) {
+    skydiveState.parachuteMesh = window.models.createParachuteModel();
+    scene.add(skydiveState.parachuteMesh);
+  }
+
+  // ALL Bots eject from their respective team's plane
+  bots.forEach((b, idx) => {
+    if (b.avatar) {
+      b.isSkydiving = true;
+      const bTeam = b.team || 'blue';
+      const originPlanePos = (bTeam === 'red') ? skydiveState.redPlanePos : skydiveState.bluePlanePos;
+      const spreadX = (idx % 2 === 0 ? 1 : -1) * (10 + (idx % 3) * 6);
+      const spreadZ = (idx % 2 === 0 ? 1 : -1) * (12 + (idx % 4) * 5);
+      b.avatar.group.position.set(
+        originPlanePos.x + spreadX,
+        originPlanePos.y + (Math.random() - 0.5) * 6,
+        originPlanePos.z + spreadZ
+      );
+      if (window.models && window.models.createParachuteModel) {
+        const bpMesh = window.models.createParachuteModel();
+        scene.add(bpMesh);
+        skydiveState.botParachutes.push({ mesh: bpMesh, bot: b });
+      }
+    }
+  });
+
+  const promptText = document.getElementById('skydive-prompt-text');
+  if (promptText) promptText.textContent = '🪂 PARAŞÜTLE SÜZÜLÜYORSUN • [W/A/S/D] ile Yön Ver • [SHIFT] Hızlı İniş';
+  if (window.soundFX && window.soundFX.playDeploy) window.soundFX.playDeploy();
+  showGlobalNotification('🪂 Paraşüt Açıldı! Yerdeki araca ve evlere doğru süzül, [SHIFT] Hızlı İniş!', 'success');
+}
+window.ejectPlayerFromPlane = ejectPlayerFromPlane;
+
+function updateSkydivePhysics(delta) {
+  if (!skydiveState.active) return;
+
+  // 1. In Plane Phase: Both planes fly in reverse directions
+  if (skydiveState.inPlane) {
+    skydiveState.planeTimer -= delta;
+    const flySpeed = 75; // 75 m/s
+
+    // Blue Plane flies South (+Z)
+    skydiveState.bluePlanePos.z += flySpeed * delta;
+    if (skydiveState.bluePlaneMesh) {
+      skydiveState.bluePlaneMesh.position.copy(skydiveState.bluePlanePos);
+      skydiveState.bluePlaneMesh.rotation.y = 0;
+    }
+
+    // Red Plane flies North (-Z)
+    skydiveState.redPlanePos.z -= flySpeed * delta;
+    if (skydiveState.redPlaneMesh) {
+      skydiveState.redPlaneMesh.position.copy(skydiveState.redPlanePos);
+      skydiveState.redPlaneMesh.rotation.y = Math.PI;
+    }
+
+    const myTeam = state.team || (window.pubgLobbyState && window.pubgLobbyState.myTeam) || 'blue';
+    if (myTeam === 'red') {
+      playerPos.set(skydiveState.redPlanePos.x, 159, skydiveState.redPlanePos.z);
+      camera.position.set(playerPos.x, playerPos.y + 4.5, playerPos.z + 20.0);
+      camera.rotation.set(headPitch, playerRotY, 0, 'YXZ');
+    } else {
+      playerPos.set(skydiveState.bluePlanePos.x, 159, skydiveState.bluePlanePos.z);
+      camera.position.set(playerPos.x, playerPos.y + 4.5, playerPos.z - 20.0);
+      camera.rotation.set(headPitch, playerRotY, 0, 'YXZ');
+    }
+
+    if (skydiveState.planeTimer <= 0) {
+      ejectPlayerFromPlane();
+    }
+    return;
+  }
+
+  // 2. Parachute Gliding Phase
+  const isShift = keys.shift;
+  const fallSpeed = isShift ? 22 : 11.5; // m/s vertical descent
+  playerPos.y -= fallSpeed * delta;
+
+  // Glide Steering with WASD
+  const glideSpeed = 24; // m/s forward gliding
+  const move = new THREE.Vector3();
+  if (keys.w) move.z -= 1;
+  if (keys.s) move.z += 1;
+  if (keys.a) move.x -= 1;
+  if (keys.d) move.x += 1;
+  move.normalize();
+  move.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerRotY);
+
+  playerPos.x += move.x * glideSpeed * delta;
+  playerPos.z += move.z * glideSpeed * delta;
+
+  // Update Parachute 3D Mesh
+  if (skydiveState.parachuteMesh) {
+    skydiveState.parachuteMesh.position.copy(playerPos);
+    skydiveState.parachuteMesh.rotation.y = playerRotY;
+  }
+
+  // Camera follows parachuting player smoothly with full mouse look
+  camera.position.set(playerPos.x, playerPos.y + 1.8, playerPos.z);
+  camera.rotation.set(headPitch, playerRotY, 0, 'YXZ');
+
+  // Keep planes continuing their flight path in the sky during parachute phase
+  const flySpeed = 75;
+  skydiveState.bluePlanePos.z += flySpeed * delta;
+  if (skydiveState.bluePlaneMesh) skydiveState.bluePlaneMesh.position.copy(skydiveState.bluePlanePos);
+  skydiveState.redPlanePos.z -= flySpeed * delta;
+  if (skydiveState.redPlaneMesh) skydiveState.redPlaneMesh.position.copy(skydiveState.redPlanePos);
+
+  // Update Bot Parachutes and Gliding towards respective team bases
+  skydiveState.botParachutes.forEach(bp => {
+    if (bp.bot && bp.bot.avatar) {
+      const bPos = bp.bot.avatar.group.position;
+      bPos.y -= fallSpeed * delta;
+      if (bp.bot.targetLanding) {
+        const dx = bp.bot.targetLanding.x - bPos.x;
+        const dz = bp.bot.targetLanding.z - bPos.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist > 4) {
+          const steerSpeed = 26;
+          bPos.x += (dx / dist) * Math.min(dist, steerSpeed * delta);
+          bPos.z += (dz / dist) * Math.min(dist, steerSpeed * delta);
+        }
+      }
+      bp.mesh.position.copy(bPos);
+    }
+  });
+
+  // Check Ground Landing
+  const groundY = checkAndResolveCollisions(playerPos, 0.75);
+  if (playerPos.y <= groundY + 0.4) {
+    playerPos.y = groundY;
+    velocity.set(0, 0, 0);
+    skydiveState.active = false;
+
+    // Clean up parachute meshes and planes
+    if (skydiveState.parachuteMesh) {
+      scene.remove(skydiveState.parachuteMesh);
+      skydiveState.parachuteMesh = null;
+    }
+    if (skydiveState.bluePlaneMesh) {
+      scene.remove(skydiveState.bluePlaneMesh);
+      skydiveState.bluePlaneMesh = null;
+    }
+    if (skydiveState.redPlaneMesh) {
+      scene.remove(skydiveState.redPlaneMesh);
+      skydiveState.redPlaneMesh = null;
+    }
+    skydiveState.botParachutes.forEach(bp => scene.remove(bp.mesh));
+    skydiveState.botParachutes = [];
+
+    // Land all bots on ground
+    bots.forEach(b => {
+      if (b.avatar) {
+        b.isSkydiving = false;
+        const gY = checkAndResolveCollisions(b.avatar.group.position, 0.75);
+        b.avatar.group.position.y = gY;
+      }
+    });
+
+    const skyHud = document.getElementById('skydive-hud');
+    if (skyHud) skyHud.style.display = 'none';
+
+    if (window.soundFX && window.soundFX.playLanding) window.soundFX.playLanding();
+    showGlobalNotification('🪂 Başarıyla İniş Yaptın! Yerdeki aracı [E] ile sür, evleri arayarak silah topla!', 'success');
+  }
+}
+window.updateSkydivePhysics = updateSkydivePhysics;
 
 // 100% RESPONSIVE KEYBOARD CONTROLS (WASD + 1/2/3/4/Q MULTI-KEY CONCURRENCY)
 function setupControls() {
@@ -961,7 +1510,7 @@ function setupControls() {
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
 
-  function handleKeyDown(e) {
+function handleKeyDown(e) {
     // If typing in an input element, do not capture game hotkeys except Escape
     if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {
       if (e.code === 'Escape') e.target.blur();
@@ -987,7 +1536,12 @@ function setupControls() {
     if (e.code === 'KeyA' || e.key === 'a' || e.key === 'A') keys.a = true;
     if (e.code === 'KeyS' || e.key === 's' || e.key === 'S') keys.s = true;
     if (e.code === 'KeyD' || e.key === 'd' || e.key === 'D') keys.d = true;
-    if (e.code === 'Space' || e.key === ' ') keys.space = true;
+    if (e.code === 'Space' || e.key === ' ') {
+      keys.space = true;
+      if (skydiveState.active && skydiveState.inPlane) {
+        ejectPlayerFromPlane();
+      }
+    }
     if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.key === 'Shift') keys.shift = true;
 
     // Instant Weapon Switching (Checked across all code/key/shift variants so 1 tap is guaranteed while holding WASD)
@@ -999,12 +1553,48 @@ function setupControls() {
       switchSlot(3);
     } else if (e.code === 'Digit4' || e.code === 'Numpad4' || e.key === '4' || e.key === '+' || e.key === '$' || e.keyCode === 52 || e.which === 52) {
       switchSlot(4);
+    } else if (e.code === 'Digit5' || e.code === 'Numpad5' || e.key === '5' || e.keyCode === 53 || e.which === 53) {
+      useBandage();
     } else if (e.code === 'KeyQ' || e.key === 'q' || e.key === 'Q' || e.keyCode === 81) {
       switchSlot(state.prevSlot);
     }
 
     if (e.code === 'KeyR' || e.key === 'r' || e.key === 'R') startReload();
-    if (e.code === 'KeyE' || e.key === 'e' || e.key === 'E') toggleADS();
+    
+    // Vehicle & Interaction Key [E]
+    if (e.code === 'KeyE' || e.key === 'e' || e.key === 'E') {
+      if (currentDrivenVehicle) {
+        exitVehicle();
+      } else if (window.activeInteractionTarget && window.activeInteractionTarget.type === 'vehicle') {
+        enterVehicle(window.activeInteractionTarget.vehicle);
+      } else {
+        toggleADS();
+      }
+    }
+
+    // Loot & Death Crate Pickup Key [F]
+    if (e.code === 'KeyF' || e.key === 'f' || e.key === 'F') {
+      if (window.activeInteractionTarget && window.activeInteractionTarget.type === 'loot') {
+        pickupLoot(window.activeInteractionTarget.loot, window.activeInteractionTarget.index);
+      } else if (window.activeInteractionTarget && window.activeInteractionTarget.type === 'death_crate') {
+        openDeathCrateModal(window.activeInteractionTarget.crate, window.activeInteractionTarget.index);
+      }
+    }
+
+    // Backpack / Inventory Key [M]
+    if (e.code === 'KeyM' || e.key === 'm' || e.key === 'M') {
+      toggleBackpackModal();
+    }
+
+    // Vehicle Horn Key [H]
+    if (e.code === 'KeyH' || e.key === 'h' || e.key === 'H') {
+      if (currentDrivenVehicle) {
+        if (window.soundFX && window.soundFX.playCarHonk) window.soundFX.playCarHonk();
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: 'vehicle_honk' }));
+        }
+      }
+    }
 
     // ESCAPE KEY: Clean, instant toggle with 320ms debouncing (no duplicate triggers!)
     if ((e.code === 'Escape' || e.key === 'Escape') && state.mode === 'battle') {
@@ -1013,6 +1603,16 @@ function setupControls() {
       if (now - lastPauseToggleTime < 320) return;
       lastPauseToggleTime = now;
 
+      const dcModal = document.getElementById('death-crate-modal');
+      if (dcModal && dcModal.style.display === 'flex') {
+        closeDeathCrateModal();
+        return;
+      }
+      const bpModal = document.getElementById('backpack-modal');
+      if (bpModal && bpModal.style.display === 'flex') {
+        toggleBackpackModal();
+        return;
+      }
       const friendsModal = document.getElementById('friends-modal');
       if (friendsModal && (friendsModal.style.display === 'flex' || friendsModal.style.display === 'block')) {
         closeFriendsModal();
@@ -1119,10 +1719,17 @@ function setupControls() {
   window.addEventListener('mousemove', (e) => {
     if (isPointerLocked && state.mode === 'battle' && !state.isPaused && !state.isDead) {
       const baseSens = state.mouseSensitivity || 0.0016;
-      const sens = state.isADS ? baseSens * 0.55 : baseSens;
-      playerRotY -= e.movementX * sens;
-      headPitch -= e.movementY * sens;
-      headPitch = Math.max(-1.45, Math.min(1.45, headPitch));
+      if (currentDrivenVehicle) {
+        // Vehicle 360° Free-Look Camera
+        vehCamYaw -= e.movementX * baseSens;
+        vehCamPitch -= e.movementY * baseSens;
+        vehCamPitch = Math.max(-0.45, Math.min(1.15, vehCamPitch));
+      } else {
+        const sens = state.isADS ? baseSens * 0.55 : baseSens;
+        playerRotY -= e.movementX * sens;
+        headPitch -= e.movementY * sens;
+        headPitch = Math.max(-1.45, Math.min(1.45, headPitch));
+      }
     }
   });
 
@@ -1192,12 +1799,16 @@ window.closePrivateGameModal = function() {
 window.createPrivateRoom = async function() {
   window.soundFX.playClick();
   const mode = document.getElementById('private-mode-select')?.value || 'FFA';
+  const map = document.getElementById('private-map-select')?.value || 'pubg';
+  const maxPlayers = parseInt(document.getElementById('private-players-select')?.value) || 16;
+  const duration = parseInt(document.getElementById('private-time-select')?.value) || 900;
+  const bots = document.getElementById('private-bots-select')?.value || 'none';
 
   try {
     const res = await fetch('/api/rooms/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode })
+      body: JSON.stringify({ mode, map, maxPlayers, duration, bots })
     });
     const data = await res.json();
 
@@ -1205,9 +1816,17 @@ window.createPrivateRoom = async function() {
       state.roomId = data.roomId;
       state.isPrivateRoom = true;
       state.matchType = mode;
+      state.matchSeconds = duration;
+      state.maxPlayers = maxPlayers;
+      state.botsEnabled = (bots === 'with_bots');
+      currentSelectedMap = map;
       closePrivateGameModal();
-      alert(`🎉 Özel Oda Başarıyla Kuruldu!\nArkadaşlarınızın girmesi için Oda Kodu: ${data.roomId}`);
-      startBattle(mode);
+      showGlobalNotification(`🎉 Özel Oda (${data.roomId}) Kuruldu!`, 'success');
+      if (map === 'pubg') {
+        openPubgTeamLobbyModal(data.roomId, mode, map, maxPlayers, true);
+      } else {
+        startBattle(mode);
+      }
     }
   } catch (e) {
     alert('Oda oluşturulamadı!');
@@ -1227,14 +1846,24 @@ window.joinPrivateRoom = async function() {
     const data = await res.json();
 
     if (!data.exists) {
-      alert(`❌ "${inputCode}" kodlu oda bulunamadı!\nLütfen geçerli ve kurulu bir Oda Kodu girin veya sağ taraftan yeni bir özel oda kurun.`);
+      alert(`❌ "${inputCode}" kodlu oda bulunamadı!\nLütfen geçerli ve kurulu bir Oda Kodu girin.`);
       return;
     }
 
     state.roomId = inputCode;
     state.isPrivateRoom = true;
+    state.matchType = data.mode || 'FFA';
+    state.matchSeconds = Number(data.duration || 900);
+    state.maxPlayers = Number(data.maxPlayers || 8);
+    state.botsEnabled = (data.bots === 'with_bots');
+    currentSelectedMap = data.map || 'pubg';
     closePrivateGameModal();
-    startBattle(data.mode || 'FFA');
+    showGlobalNotification(`🚀 Odaya bağlanılıyor: ${inputCode}`, 'info');
+    if (currentSelectedMap === 'pubg') {
+      openPubgTeamLobbyModal(inputCode, state.matchType, currentSelectedMap, state.maxPlayers, false);
+    } else {
+      startBattle(data.mode || 'FFA');
+    }
   } catch (e) {
     alert('Sunucuya bağlanılamadı!');
   }
@@ -1280,16 +1909,29 @@ function updateScoreboardUI() {
     ping: state.ping || 18
   };
 
-  const allEntries = [playerEntry, ...bots.map(b => ({
-    isLocal: false,
-    name: b.name,
-    level: b.level,
-    kills: b.kills,
-    deaths: b.deaths,
-    kd: (b.deaths === 0 ? b.kills : (b.kills / b.deaths)).toFixed(1),
-    score: b.score,
-    ping: b.ping || 24
-  }))];
+  const allEntries = [
+    playerEntry,
+    ...Array.from(remotePlayers.values()).map(rp => ({
+      isLocal: false,
+      name: rp.name || 'Oyuncu',
+      level: rp.level || 1,
+      kills: rp.kills || 0,
+      deaths: rp.deaths || 0,
+      kd: (rp.deaths === 0 ? (rp.kills || 0) : ((rp.kills || 0) / rp.deaths)).toFixed(1),
+      score: rp.score || 0,
+      ping: rp.ping || 22
+    })),
+    ...(state.botsEnabled !== false ? bots.map(b => ({
+      isLocal: false,
+      name: b.name,
+      level: b.level,
+      kills: b.kills,
+      deaths: b.deaths,
+      kd: (b.deaths === 0 ? b.kills : (b.kills / b.deaths)).toFixed(1),
+      score: b.score,
+      ping: b.ping || 24
+    })) : [])
+  ];
 
   // PRIMARY SORT: BY KILLS DESCENDING (As requested: "en çok kişiyi kim öldürdü")
   allEntries.sort((a, b) => b.kills - a.kills || b.score - a.score);
@@ -1332,14 +1974,325 @@ function setADS(val) {
   if (ch) ch.classList.toggle('ads-mode', val);
 }
 
+// ========================================================
+// PUBG SPECIAL PRE-MATCH TEAM & WAITING LOBBY (8 PLAYERS)
+// ========================================================
+window.pubgLobbyState = {
+  active: false,
+  roomId: 'PUBG-8P',
+  isHost: true,
+  mode: 'TDM', // 'TDM' (Takımlı 4v4) or 'FFA' (Herkes Tek)
+  map: 'pubg',
+  maxPlayers: 8,
+  myTeam: 'blue',
+  players: [],
+  botsFilled: false
+};
+
+const PUBG_BOT_NAMES = ['Bot Enes', 'Bot Can', 'Bot Efe', 'Bot Mert', 'Bot Kerem', 'Bot Emre', 'Bot Baran', 'Bot Arda'];
+
+window.openPubgTeamLobbyModal = function(roomId, mode = 'TDM', map = 'pubg', maxPlayers = 8, isHost = true) {
+  pubgLobbyState.active = true;
+  pubgLobbyState.roomId = roomId || state.roomId || 'PUBG-8P';
+  pubgLobbyState.mode = (mode === 'FFA') ? 'FFA' : 'TDM';
+  pubgLobbyState.map = map || 'pubg';
+  pubgLobbyState.maxPlayers = maxPlayers || 8;
+  pubgLobbyState.isHost = isHost;
+  pubgLobbyState.myTeam = 'blue';
+  pubgLobbyState.botsFilled = false;
+
+  state.roomId = pubgLobbyState.roomId;
+  state.isPrivateRoom = true;
+  state.matchType = pubgLobbyState.mode;
+  state.team = 'blue';
+  currentSelectedMap = pubgLobbyState.map;
+
+  pubgLobbyState.players = [{
+    id: state.myPlayerId || 'local_player',
+    name: state.myName || 'Ensar',
+    team: 'blue',
+    isHost: isHost,
+    isBot: false
+  }];
+
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify({
+      type: 'join_room',
+      roomId: pubgLobbyState.roomId,
+      isPrivate: true,
+      mode: pubgLobbyState.mode,
+      map: pubgLobbyState.map,
+      maxPlayers: pubgLobbyState.maxPlayers,
+      name: state.myName || 'Ensar',
+      team: 'blue',
+      x: 0, y: 0, z: 0, rotY: 0
+    }));
+  }
+
+  const roomEl = document.getElementById('pubg-lobby-room-code');
+  if (roomEl) roomEl.textContent = `ODA KODU: ${pubgLobbyState.roomId}`;
+  const mapEl = document.getElementById('pubg-lobby-map-name');
+  if (mapEl) mapEl.textContent = `HARİTA: 8000m Erangel`;
+
+  setLobbyGameMode(pubgLobbyState.mode, false);
+  renderPubgLobbySlots();
+
+  const startBtn = document.getElementById('btn-host-start-match');
+  if (startBtn) {
+    startBtn.style.display = isHost ? 'block' : 'none';
+  }
+
+  const modal = document.getElementById('pubg-team-lobby-modal');
+  if (modal) modal.style.display = 'flex';
+};
+
+window.choosePlayerTeam = function(newTeam) {
+  if (pubgLobbyState.myTeam === newTeam) return;
+  pubgLobbyState.myTeam = newTeam;
+  state.team = newTeam;
+  if (window.soundFX && window.soundFX.playClick) window.soundFX.playClick();
+
+  const me = pubgLobbyState.players.find(p => p.id === (state.myPlayerId || 'local_player') || p.name === state.myName);
+  if (me) me.team = newTeam;
+
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify({
+      type: 'switch_team',
+      team: newTeam
+    }));
+  }
+
+  renderPubgLobbySlots();
+  showGlobalNotification(newTeam === 'blue' ? '🔵 Mavi Takıma (Güney Jeep Üssü) geçtin!' : '🔴 Kırmızı Takıma (Kuzey Jeep Üssü) geçtin!', 'info');
+};
+
+window.setLobbyGameMode = function(mode, notify = true) {
+  pubgLobbyState.mode = mode;
+  state.matchType = mode;
+
+  const btnTeam = document.getElementById('btn-mode-team');
+  const btnSolo = document.getElementById('btn-mode-solo');
+  const teamsView = document.getElementById('pubg-teams-view');
+  const soloView = document.getElementById('pubg-solo-view');
+
+  if (mode === 'TDM') {
+    if (btnTeam) btnTeam.classList.add('active');
+    if (btnSolo) btnSolo.classList.remove('active');
+    if (teamsView) teamsView.style.display = 'flex';
+    if (soloView) soloView.style.display = 'none';
+  } else {
+    if (btnTeam) btnTeam.classList.remove('active');
+    if (btnSolo) btnSolo.classList.add('active');
+    if (teamsView) teamsView.style.display = 'none';
+    if (soloView) soloView.style.display = 'grid';
+  }
+
+  renderPubgLobbySlots();
+  if (notify) {
+    showGlobalNotification(mode === 'TDM' ? '🛡️ Takımlı Savaş Seçildi (4v4 Mavi vs Kırmızı)' : '💀 Herkes Tek Seçildi (Solo 8 Kişi)', 'info');
+  }
+};
+
+window.toggleFillLobbyBots = function() {
+  if (window.soundFX && window.soundFX.playClick) window.soundFX.playClick();
+  pubgLobbyState.botsFilled = !pubgLobbyState.botsFilled;
+
+  if (pubgLobbyState.botsFilled) {
+    const existing = pubgLobbyState.players.filter(p => !p.isBot);
+    const needed = Math.max(0, pubgLobbyState.maxPlayers - existing.length);
+    const filled = [...existing];
+
+    let botIdx = 0;
+    for (let i = 0; i < needed; i++) {
+      const blueCount = filled.filter(p => p.team === 'blue').length;
+      const redCount = filled.filter(p => p.team === 'red').length;
+      const team = (blueCount <= redCount) ? 'blue' : 'red';
+      filled.push({
+        id: 'bot_' + (i + 1),
+        name: PUBG_BOT_NAMES[botIdx % PUBG_BOT_NAMES.length],
+        team: team,
+        isHost: false,
+        isBot: true
+      });
+      botIdx++;
+    }
+    pubgLobbyState.players = filled;
+    state.botsEnabled = true;
+    showGlobalNotification('🤖 8 Kişilik Oda Botlarla Dolduruldu! Oyunu Başlatabilirsin.', 'success');
+  } else {
+    pubgLobbyState.players = pubgLobbyState.players.filter(p => !p.isBot);
+    state.botsEnabled = false;
+    showGlobalNotification('🤖 Botlar çıkarıldı. Gerçek oyuncular bekleniyor.', 'warning');
+  }
+
+  renderPubgLobbySlots();
+};
+
+window.triggerHostStartMatch = function() {
+  if (!pubgLobbyState.isHost) {
+    showGlobalNotification('⏳ Sadece Oda Kurucusu (Host) oyunu başlatabilir!', 'warning');
+    return;
+  }
+
+  if (window.soundFX && window.soundFX.playClick) window.soundFX.playClick();
+
+  // If there are empty slots and host clicks start, automatically fill bots
+  if (pubgLobbyState.players.length < pubgLobbyState.maxPlayers) {
+    window.toggleFillLobbyBots();
+  }
+
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify({
+      type: 'room_start_match',
+      roomId: pubgLobbyState.roomId,
+      mode: pubgLobbyState.mode,
+      map: pubgLobbyState.map
+    }));
+  }
+
+  window.launchPubgMatchFromLobby();
+};
+
+window.launchPubgMatchFromLobby = function() {
+  const modal = document.getElementById('pubg-team-lobby-modal');
+  if (modal) modal.style.display = 'none';
+  pubgLobbyState.active = false;
+
+  currentSelectedMap = pubgLobbyState.map || 'pubg';
+  state.matchType = pubgLobbyState.mode || 'TDM';
+  state.team = pubgLobbyState.myTeam || 'blue';
+
+  showGlobalNotification('🚀 Maç Başladı! Erangel 8000m haritasına kargo uçağıyla uçuyorsunuz...', 'success');
+  executeStartBattle(state.matchType);
+};
+
+window.leavePubgTeamLobby = function() {
+  const modal = document.getElementById('pubg-team-lobby-modal');
+  if (modal) modal.style.display = 'none';
+  pubgLobbyState.active = false;
+  showGlobalNotification('Lobi terk edildi.', 'info');
+};
+
+window.renderPubgLobbySlots = function() {
+  const countBadge = document.getElementById('pubg-lobby-player-count');
+  if (countBadge) {
+    countBadge.textContent = `OYUNCULAR: ${pubgLobbyState.players.length} / ${pubgLobbyState.maxPlayers}`;
+  }
+
+  const statusMsg = document.getElementById('pubg-lobby-status-msg');
+  if (statusMsg) {
+    if (pubgLobbyState.players.length >= pubgLobbyState.maxPlayers) {
+      statusMsg.innerHTML = '<span style="color: #4ade80;">✅ Oda Tamamen Doldu (8/8)! Başlamaya hazır.</span>';
+    } else {
+      statusMsg.textContent = `⏳ ${pubgLobbyState.maxPlayers - pubgLobbyState.players.length} Oyuncu daha bekleniyor...`;
+    }
+  }
+
+  const blueList = document.getElementById('blue-slots-list');
+  const redList = document.getElementById('red-slots-list');
+  const blueBadge = document.getElementById('blue-count-badge');
+  const redBadge = document.getElementById('red-count-badge');
+
+  const halfMax = Math.floor(pubgLobbyState.maxPlayers / 2);
+  const bluePlayers = pubgLobbyState.players.filter(p => p.team === 'blue');
+  const redPlayers = pubgLobbyState.players.filter(p => p.team === 'red');
+
+  if (blueBadge) blueBadge.textContent = `${bluePlayers.length} / ${halfMax}`;
+  if (redBadge) redBadge.textContent = `${redPlayers.length} / ${halfMax}`;
+
+  if (blueList) {
+    let html = '';
+    for (let i = 0; i < halfMax; i++) {
+      const p = bluePlayers[i];
+      if (p) {
+        const isMe = (p.id === state.myPlayerId || p.id === 'local_player' || p.name === state.myName);
+        html += `
+          <div class="pubg-slot-card ${isMe ? 'is-you' : ''}">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 18px;">${p.isBot ? '🤖' : (isMe ? '👑' : '👤')}</span>
+              <span style="font-weight: 800; color: #fff; font-size: 13px;">${p.name || 'Oyuncu'}</span>
+              ${isMe ? '<span style="font-size: 10px; background: #eab308; color: #000; font-weight: 900; padding: 1px 6px; border-radius: 4px;">SEN</span>' : ''}
+              ${p.isHost ? '<span style="font-size: 10px; background: #3b82f6; color: #fff; font-weight: 800; padding: 1px 5px; border-radius: 4px;">HOST</span>' : ''}
+            </div>
+            <span style="font-size: 11px; color: #38bdf8; font-weight: 800;">HAZIR</span>
+          </div>`;
+      } else {
+        html += `
+          <div class="pubg-slot-card empty-slot">
+            <span style="font-size: 12px; color: #64748b; font-weight: 700;">+ Boş Slot ${i + 1}</span>
+            <span style="font-size: 11px; color: #475569;">Bekleniyor...</span>
+          </div>`;
+      }
+    }
+    blueList.innerHTML = html;
+  }
+
+  if (redList) {
+    let html = '';
+    for (let i = 0; i < halfMax; i++) {
+      const p = redPlayers[i];
+      if (p) {
+        const isMe = (p.id === state.myPlayerId || p.id === 'local_player' || p.name === state.myName);
+        html += `
+          <div class="pubg-slot-card ${isMe ? 'is-you' : ''}">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 18px;">${p.isBot ? '🤖' : (isMe ? '👑' : '👤')}</span>
+              <span style="font-weight: 800; color: #fff; font-size: 13px;">${p.name || 'Oyuncu'}</span>
+              ${isMe ? '<span style="font-size: 10px; background: #eab308; color: #000; font-weight: 900; padding: 1px 6px; border-radius: 4px;">SEN</span>' : ''}
+              ${p.isHost ? '<span style="font-size: 10px; background: #3b82f6; color: #fff; font-weight: 800; padding: 1px 5px; border-radius: 4px;">HOST</span>' : ''}
+            </div>
+            <span style="font-size: 11px; color: #f87171; font-weight: 800;">HAZIR</span>
+          </div>`;
+      } else {
+        html += `
+          <div class="pubg-slot-card empty-slot">
+            <span style="font-size: 12px; color: #64748b; font-weight: 700;">+ Boş Slot ${i + 1}</span>
+            <span style="font-size: 11px; color: #475569;">Bekleniyor...</span>
+          </div>`;
+      }
+    }
+    redList.innerHTML = html;
+  }
+
+  const soloView = document.getElementById('pubg-solo-view');
+  if (soloView) {
+    let html = '';
+    for (let i = 0; i < pubgLobbyState.maxPlayers; i++) {
+      const p = pubgLobbyState.players[i];
+      if (p) {
+        const isMe = (p.id === state.myPlayerId || p.id === 'local_player' || p.name === state.myName);
+        html += `
+          <div class="pubg-slot-card ${isMe ? 'is-you' : ''}" style="flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 14px;">
+            <span style="font-size: 28px;">${p.isBot ? '🤖' : (isMe ? '👑' : '👤')}</span>
+            <span style="font-weight: 800; color: #fff; font-size: 13px;">${p.name || 'Oyuncu'}</span>
+            ${isMe ? '<span style="font-size: 10px; background: #eab308; color: #000; font-weight: 900; padding: 2px 6px; border-radius: 4px;">SEN</span>' : ''}
+            <span style="font-size: 11px; color: #10b981; font-weight: 800;">SOLO HAZIR</span>
+          </div>`;
+      } else {
+        html += `
+          <div class="pubg-slot-card empty-slot" style="flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 6px; padding: 14px;">
+            <span style="font-size: 22px; opacity: 0.4;">⏳</span>
+            <span style="font-size: 12px; color: #64748b; font-weight: 700;">Boş Slot ${i + 1}</span>
+          </div>`;
+      }
+    }
+    soloView.innerHTML = html;
+  }
+};
+
 window.startBattle = function(mode = 'FFA') {
   window.soundFX.playClick();
   closeModeModal();
   closePrivateGameModal();
 
   state.pendingBattleMode = mode;
-  // Open Pre-Match Loadout Screen so the player chooses their weapons and knife BEFORE entering battle!
-  openChangeGunsModal(true);
+  // In PUBG Survival Mode: Open Pre-Match Team & Waiting Lobby so players can choose Blue vs Red teams or Solo!
+  if (currentSelectedMap === 'pubg') {
+    openPubgTeamLobbyModal(state.roomId || 'PUBG-8P', mode === 'FFA' ? 'FFA' : 'TDM', 'pubg', 8, true);
+  } else {
+    // Open Pre-Match Loadout Screen so the player chooses their weapons and knife BEFORE entering battle!
+    openChangeGunsModal(true);
+  }
 };
 
 window.executeStartBattle = function(mode = 'FFA') {
@@ -1349,9 +2302,32 @@ window.executeStartBattle = function(mode = 'FFA') {
   state.isDead = false;
   state.health = 150;
   state.matchSeconds = 10 * 60; // 10 minutes maximum match time
-  state.slotAmmo = { 1: 30, 2: 15, 3: 1, 4: 2 };
-  state.ammo = getCurrentWeapon().maxAmmo;
-  state.slotAmmo[state.currentSlot] = state.ammo;
+  if (currentSelectedMap === 'pubg') {
+    // In PUBG Survival Mode: Start completely UNARMED! Only knife equipped; loot weapons in houses!
+    state.equippedGuns[1] = null;
+    state.equippedGuns[2] = null;
+    state.equippedGuns[3] = 'Combat Knife';
+    state.equippedGuns[4] = null;
+    state.currentSlot = 3;
+    state.slotAmmo = { 1: 0, 2: 0, 3: 1, 4: 0 };
+    state.reserveAmmo = { 1: 0, 2: 0, 4: 0 };
+    state.ammo = 0;
+    state.hasSilencer = false;
+
+    // Reset slot boxes in HUD
+    const s1 = document.getElementById('slot-1');
+    const s2 = document.getElementById('slot-2');
+    if (s1) { s1.innerHTML = '🔫'; s1.title = 'Key 1: Boş'; }
+    if (s2) { s2.innerHTML = '🔥'; s2.title = 'Key 2: Boş'; }
+
+    showGlobalNotification('🪂 PUBG Modu: Silahsız başladın! Evleri ve hangarları arayarak silah, mermi ve bandaj bul!', 'warning');
+  } else {
+    state.currentSlot = 1;
+    state.slotAmmo = { 1: 30, 2: 15, 3: 1, 4: 2 };
+    state.ammo = getCurrentWeapon().maxAmmo;
+    state.slotAmmo[state.currentSlot] = state.ammo;
+    state.hasSilencer = false;
+  }
   state.isReloading = false;
 
   document.getElementById('ui-root').style.display = 'none';
@@ -1376,28 +2352,103 @@ window.executeStartBattle = function(mode = 'FFA') {
   deployGraceTimer = 0.5;
   if (lobbyEnv) lobbyEnv.visible = false;
   if (localAvatar && localAvatar.group) localAvatar.group.visible = false;
-  if (currentSelectedMap === 'cyber_city' && cyberCityData) {
-    if (arenaData && arenaData.group) arenaData.group.visible = false;
-    cyberCityData.group.visible = true;
+  if (arenaData && arenaData.group) arenaData.group.visible = false;
+  if (cyberCityData && cyberCityData.group) cyberCityData.group.visible = false;
+  if (pubgMapData && pubgMapData.group) pubgMapData.group.visible = false;
+
+  const currentMap = getActiveMapData();
+  if (currentMap && currentMap.group) currentMap.group.visible = true;
+
+  // Set Battle Map Atmosphere Sky
+  if (state.pendingBattleMode === 'pubg' || (pubgMapData && pubgMapData.group && pubgMapData.group.visible)) {
+    scene.background = new THREE.Color(0x7ec0ee); // PUBG sunny outdoor sky
+    scene.fog = new THREE.FogExp2(0x7ec0ee, 0.00015); // Clear panoramic distance fog for 8000m map
+  } else if (state.pendingBattleMode === 'cybercity' || (cyberCityData && cyberCityData.group && cyberCityData.group.visible)) {
+    scene.background = new THREE.Color(0x0b0f19); // Cyber city night sky
+    scene.fog = new THREE.FogExp2(0x0b0f19, 0.008);
   } else {
-    if (cyberCityData && cyberCityData.group) cyberCityData.group.visible = false;
-    if (arenaData && arenaData.group) arenaData.group.visible = true;
+    scene.background = new THREE.Color(0x2196f3); // Block arena blue sky
+    scene.fog = new THREE.FogExp2(0x2196f3, 0.002);
   }
+
   updateViewmodelVisibility();
 
   // Deploy animation
   deployOffset = 1.0;
-  window.soundFX.playDeploy();
 
-  const spawn = getRandomSpawn();
-  playerPos.set(spawn.x, 0, spawn.z);
-  playerRotY = Math.PI;
-  headPitch = 0;
-  velocity.set(0, 0, 0);
+  // PUBG AIRPLANE & SKYDIVE SEQUENCE INITIALIZATION (2 OPPOSING PLANES FOR EACH TEAM!)
+  if (currentSelectedMap === 'pubg') {
+    skydiveState.active = true;
+    skydiveState.inPlane = true;
+    skydiveState.planeTimer = 14.0; // 14 seconds flight time
 
-  // Instantly place camera at spawn position to prevent rendering lobby orbit
-  camera.position.set(playerPos.x, playerPos.y + 1.8, playerPos.z);
-  camera.rotation.set(headPitch, playerRotY, 0, 'YXZ');
+    // Clean any prior plane/chute
+    if (skydiveState.bluePlaneMesh) scene.remove(skydiveState.bluePlaneMesh);
+    if (skydiveState.redPlaneMesh) scene.remove(skydiveState.redPlaneMesh);
+    if (skydiveState.parachuteMesh) scene.remove(skydiveState.parachuteMesh);
+    skydiveState.botParachutes.forEach(bp => scene.remove(bp.mesh));
+    skydiveState.botParachutes = [];
+
+    // Create 3D Military Cargo Transport Planes for BOTH Teams
+    if (window.models && window.models.createMilitaryCargoPlane) {
+      // 1. Blue Team Plane: Starts at North (z = -1180), flies South (+Z) towards Pochinki (z = -120)
+      skydiveState.bluePlaneMesh = window.models.createMilitaryCargoPlane();
+      skydiveState.bluePlanePos.set(-35, 160, -1180);
+      skydiveState.bluePlaneMesh.position.copy(skydiveState.bluePlanePos);
+      skydiveState.bluePlaneMesh.rotation.y = 0;
+      scene.add(skydiveState.bluePlaneMesh);
+
+      // 2. Red Team Plane: Starts at South (z = 1880), flies North (-Z) towards Rozhok (z = 820)
+      skydiveState.redPlaneMesh = window.models.createMilitaryCargoPlane();
+      skydiveState.redPlanePos.set(30, 160, 1880);
+      skydiveState.redPlaneMesh.position.copy(skydiveState.redPlanePos);
+      skydiveState.redPlaneMesh.rotation.y = Math.PI; // Heading opposite direction!
+      scene.add(skydiveState.redPlaneMesh);
+    }
+
+    const myTeam = state.team || (window.pubgLobbyState && window.pubgLobbyState.myTeam) || 'blue';
+    if (myTeam === 'red') {
+      playerPos.set(skydiveState.redPlanePos.x, 159, skydiveState.redPlanePos.z);
+      playerRotY = Math.PI;
+      headPitch = -0.15;
+      velocity.set(0, 0, -75);
+    } else {
+      playerPos.set(skydiveState.bluePlanePos.x, 159, skydiveState.bluePlanePos.z);
+      playerRotY = 0;
+      headPitch = -0.15;
+      velocity.set(0, 0, 75);
+    }
+
+    const skyHud = document.getElementById('skydive-hud');
+    if (skyHud) skyHud.style.display = 'block';
+    if (window.soundFX && window.soundFX.playDeploy) window.soundFX.playDeploy();
+    showGlobalNotification('✈️ Her İki Takım İçin Karşılıklı Kargo Uçakları Havada! [SPACE] ile İstediğin Yere Paraşütle Atla!', 'info');
+  }
+
+  if (window.soundFX && window.soundFX.playDeploy) window.soundFX.playDeploy();
+
+  updateSlotBarVisibility();
+  if (currentSelectedMap !== 'pubg') {
+    const playerTeam = (state.matchType === 'TDM') ? 'blue' : null;
+    const spawn = getRandomSpawn(playerTeam);
+    playerPos.set(spawn.x, 0, spawn.z);
+    playerRotY = Math.PI;
+    headPitch = 0;
+    velocity.set(0, 0, 0);
+
+    // Instantly place camera at spawn position to prevent rendering lobby orbit
+    camera.position.set(playerPos.x, playerPos.y + 1.8, playerPos.z);
+    camera.rotation.set(headPitch, playerRotY, 0, 'YXZ');
+  } else {
+    // In PUBG mode: Camera starts high in sky behind cargo plane
+    const myTeamCam = state.team || (window.pubgLobbyState && window.pubgLobbyState.myTeam) || 'blue';
+    if (myTeamCam === 'red') {
+      camera.position.set(playerPos.x, playerPos.y + 3.0, playerPos.z + 12.0);
+    } else {
+      camera.position.set(playerPos.x, playerPos.y + 3.0, playerPos.z - 12.0);
+    }
+    camera.rotation.set(headPitch, playerRotY, 0, 'YXZ');
+  }
 
   // Spawn Bots only if public match (No bots in private rooms!)
   spawnBots();
@@ -1424,6 +2475,9 @@ window.pauseGame = function() {
   state.isPaused = true;
   hideFocusOverlay();
   document.exitPointerLock();
+
+  const cgBtn = document.querySelector('.btn-change-guns');
+  if (cgBtn) cgBtn.style.display = (currentSelectedMap === 'pubg') ? 'none' : 'flex';
 
   // If paused while in mid-air (jumping), settle down to ground immediately so player never freezes mid-air
   const groundY = checkAndResolveCollisions(playerPos, 0.75);
@@ -1555,10 +2609,16 @@ window.leaveBattle = function() {
     }));
   }
 
-  lobbyEnv.visible = true;
-  localAvatar.group.visible = true;
-  if (arenaData) arenaData.group.visible = false;
-  if (cyberCityData) cyberCityData.group.visible = false;
+  // Return to sleek sci-fi lobby atmosphere
+  scene.background = new THREE.Color(0x0a0e1a);
+  scene.fog = new THREE.FogExp2(0x0a0e1a, 0.012);
+
+  if (lobbyEnv) lobbyEnv.visible = true;
+  if (localAvatar && localAvatar.group) localAvatar.group.visible = true;
+  if (arenaData && arenaData.group) arenaData.group.visible = false;
+  if (cyberCityData && cyberCityData.group) cyberCityData.group.visible = false;
+  if (pubgMapData && pubgMapData.group) pubgMapData.group.visible = false;
+  if (currentDrivenVehicle) exitVehicle();
 
   // Hide all first-person weapon viewmodels in lobby so nothing floats on screen!
   Object.values(viewmodels).forEach(vm => {
@@ -1572,14 +2632,47 @@ window.leaveBattle = function() {
   window.soundFX.playClick();
 };
 
+
+function attachSilencerToViewmodel(vm) {
+  if (!vm || !window.models || !window.models.createSilencerModel) return;
+  if (vm.silencerMesh) {
+    try { vm.remove(vm.silencerMesh); } catch(e){}
+    vm.silencerMesh = null;
+  }
+  if (!state.hasSilencer) return;
+
+  const silencer = window.models.createSilencerModel();
+  const gunName = state.equippedGuns[state.currentSlot] || '';
+  if (gunName.includes('Sniper')) {
+    silencer.position.set(0, 0.05, -1.35);
+  } else if (gunName.includes('Pistol') || gunName.includes('Deagle') || gunName.includes('Revolver')) {
+    silencer.position.set(0, 0.03, -0.45);
+    silencer.scale.set(0.75, 0.75, 0.75);
+  } else if (gunName.includes('Shotgun')) {
+    silencer.position.set(0, 0.05, -0.85);
+    silencer.scale.set(1.15, 1.15, 1.0);
+  } else {
+    // AK-47, Burst, Minigun, Assault Rifle
+    silencer.position.set(0, 0.04, -0.92);
+  }
+  vm.add(silencer);
+  vm.silencerMesh = silencer;
+}
+
 function updateViewmodelVisibility() {
   // Hide all viewmodels first
   Object.values(viewmodels).forEach(vm => {
     vm.visible = false;
+    if (vm.flash) vm.flash.visible = false;
   });
   activeGun = null;
 
-  if (state.mode !== 'battle' || state.isDead) return;
+  if (state.mode !== 'battle' || state.isDead || currentDrivenVehicle) return;
+
+  // In PUBG mode, if slot 1 or 2 has not been looted yet, show no weapon viewmodel
+  if ((state.currentSlot === 1 && !state.equippedGuns[1]) || (state.currentSlot === 2 && !state.equippedGuns[2])) {
+    return;
+  }
 
   const currentW = getCurrentWeapon();
   const vm = viewmodels[currentW.name] || (state.currentSlot === 1 ? viewmodels['AK-47'] : (state.currentSlot === 2 ? viewmodels['Pistol'] : (state.currentSlot === 3 ? viewmodels['Combat Knife'] : viewmodels['Frag Grenade'])));
@@ -1589,13 +2682,44 @@ function updateViewmodelVisibility() {
     if (window.models && window.models.applySkinToMesh) {
       window.models.applySkinToMesh(vm, activeSkin, currentW.name);
     }
+    if (vm.flash) vm.flash.visible = false;
     vm.visible = true;
     activeGun = vm;
+
+    // Attach 3D silencer mesh if acquired and in a firearm slot
+    if (state.hasSilencer && (state.currentSlot === 1 || state.currentSlot === 2)) {
+      attachSilencerToViewmodel(vm);
+    } else if (vm.silencerMesh) {
+      try { vm.remove(vm.silencerMesh); } catch(e){}
+      vm.silencerMesh = null;
+    }
   }
 }
 
 // 100% RELIABLE WEAPON SWITCH WITH MECHANICAL AUDIO & SPRING DEPLOY FX
 window.switchSlot = function(slotNum) {
+  // If requested slot is empty, check if the other weapon slot has a weapon and switch to it!
+  if (slotNum === 1 && !state.equippedGuns[1]) {
+    if (state.equippedGuns[2]) {
+      switchSlot(2);
+      return;
+    }
+    showGlobalNotification('❌ Henüz silah bulamadın! Evlerden silah topla.', 'warning');
+    return;
+  }
+  if (slotNum === 2 && !state.equippedGuns[2]) {
+    if (state.equippedGuns[1]) {
+      switchSlot(1);
+      return;
+    }
+    showGlobalNotification('❌ 2. Slot boş! Haritadan ikinci bir silah bulabilirsin.', 'warning');
+    return;
+  }
+  if (slotNum === 4 && !state.equippedGuns[4]) {
+    showGlobalNotification('❌ El bombası slotu boş!', 'warning');
+    return;
+  }
+
   // If already on this slot, do NOTHING! Prevents ammo refill/drain bug when pressing 1 repeatedly!
   if (state.currentSlot === slotNum) return;
 
@@ -1777,6 +2901,13 @@ function shoot() {
   }
 
   // SLOTS 1 & 2: GUNFIRE
+  if (currentDrivenVehicle) return; // Do not shoot while driving car!
+
+  if ((state.currentSlot === 1 && !state.equippedGuns[1]) || (state.currentSlot === 2 && !state.equippedGuns[2])) {
+    showGlobalNotification(`❌ ${state.currentSlot}. Slot boş! Evlerden silah bulmalısın.`, 'warning');
+    return;
+  }
+
   if (state.ammo <= 0) {
     startReload();
     return;
@@ -1791,12 +2922,31 @@ function shoot() {
     setTimeout(startReload, 80);
   }
 
-  window.soundFX.playShot(weapon.sound);
+  const origin = camera.position.clone();
+
+  // Play suppressed or standard shot sound
+  if (state.hasSilencer && window.soundFX && window.soundFX.playSuppressedShot) {
+    window.soundFX.playSuppressedShot(origin, camera.position, playerRotY);
+  } else {
+    window.soundFX.playShot(weapon.sound);
+  }
 
   recoilOffset = state.currentSlot === 1 ? 0.16 : 0.12;
-  if (activeGun && activeGun.flash) {
-    activeGun.flash.material.opacity = 1;
-    flashTimer = 0.05;
+
+  // Suppress muzzle flash when silencer is attached
+  if (!state.hasSilencer && activeGun && activeGun.flash) {
+    activeGun.flash.visible = true;
+    if (activeGun.flash.mat) {
+      activeGun.flash.mat.opacity = 1;
+    } else if (activeGun.flash.material) {
+      activeGun.flash.material.opacity = 1;
+    }
+    activeGun.flash.rotation.z = Math.random() * Math.PI * 2;
+    const s = 0.85 + Math.random() * 0.35;
+    activeGun.flash.scale.set(s, s, s);
+    flashTimer = 0.04;
+  } else if (state.hasSilencer && activeGun && activeGun.flash) {
+    activeGun.flash.visible = false;
   }
 
   const shootDir = new THREE.Vector3();
@@ -1808,7 +2958,6 @@ function shoot() {
   shootDir.z += (Math.random() - 0.5) * spread;
   shootDir.normalize();
 
-  const origin = camera.position.clone();
   createLaserTracer(origin, shootDir);
 
   // Sync to server over WebSocket
@@ -1842,7 +2991,7 @@ function shoot() {
   bots.forEach((bot) => {
     if (bot.health > 0 && !bot.isDead) {
       // In TDM, player and Blue bots are on the same team -> Friendly fire disabled!
-      if (state.matchType === 'TDM' && bot.team === 'blue') {
+      if ((state.matchType === 'TDM' || state.matchType === '2v2') && bot.team === 'blue') {
         return;
       }
 
@@ -1869,8 +3018,10 @@ function shoot() {
             bot.avatar.hpFill.scale.x = Math.max(0, bot.health / bot.maxHealth);
           }
 
-          bot.currentTarget = { pos: playerPos, isPlayer: true, dist: bot.avatar.group.position.distanceTo(playerPos) };
-          bot.strafeDir *= -1;
+          if (state.matchType !== 'TDM' || bot.team !== 'blue') {
+            bot.currentTarget = { pos: playerPos, isPlayer: true, dist: bot.avatar.group.position.distanceTo(playerPos) };
+            bot.strafeDir *= -1;
+          }
 
           if (bot.health <= 0) {
             handleBotKill(bot, weapon, isHeadshot);
@@ -1958,6 +3109,9 @@ function handleBotKill(bot, weapon, isHeadshot) {
   bot.avatar.group.position.y = 0.25;
   if (bot.avatar.hpGroup) bot.avatar.hpGroup.visible = false;
 
+  // Spawn lootable death crate at death location
+  spawnDeathCrate(bot.avatar.group.position, bot);
+
   if (state.isTabOpen) updateScoreboardUI();
 
   setTimeout(() => {
@@ -1973,9 +3127,243 @@ function handleBotKill(bot, weapon, isHeadshot) {
   }, 2600);
 }
 
+
+
+window.openDeathCrateModal = function(crate, index) {
+  if (!crate || crate.collected) return;
+  currentInspectedCrate = crate;
+  const modal = document.getElementById('death-crate-modal');
+  if (!modal) return;
+
+  const wInfo = ALL_WEAPONS_CATALOG[crate.weapon] || ALL_WEAPONS_CATALOG['AK-47'];
+  const wNameEl = document.getElementById('crate-weapon-name');
+  const wIconEl = document.getElementById('crate-weapon-icon');
+  const wDescEl = document.getElementById('crate-weapon-desc');
+  const ammoDescEl = document.getElementById('crate-ammo-desc');
+  const bandagesDescEl = document.getElementById('crate-bandages-desc');
+  const silencerRow = document.getElementById('crate-silencer-row');
+
+  if (wNameEl) wNameEl.textContent = wInfo.name;
+  if (wIconEl) wIconEl.textContent = wInfo.icon || '🔫';
+  if (wDescEl) wDescEl.textContent = `${wInfo.maxAmmo || 30} Mermi ile birlikte`;
+  if (ammoDescEl) ammoDescEl.textContent = `+${crate.ammo} Yedek Mermi`;
+  if (bandagesDescEl) bandagesDescEl.textContent = `${crate.bandages}x Bandaj (+45 Can)`;
+  if (silencerRow) silencerRow.style.display = crate.hasSilencer ? 'flex' : 'none';
+
+  modal.style.display = 'flex';
+  document.exitPointerLock();
+  if (window.soundFX && window.soundFX.playClick) window.soundFX.playClick();
+};
+
+window.closeDeathCrateModal = function() {
+  const modal = document.getElementById('death-crate-modal');
+  if (modal) modal.style.display = 'none';
+  currentInspectedCrate = null;
+  if (window.soundFX && window.soundFX.playClick) window.soundFX.playClick();
+  if (state.mode === 'battle' && !state.isPaused && !state.isDead && !skydiveState.inPlane) {
+    renderer.domElement.requestPointerLock();
+  }
+};
+
+window.lootCrateWeapon = function(targetSlot) {
+  if (!currentInspectedCrate) return;
+  const crate = currentInspectedCrate;
+  const wInfo = ALL_WEAPONS_CATALOG[crate.weapon] || ALL_WEAPONS_CATALOG['AK-47'];
+
+  state.equippedGuns[targetSlot] = crate.weapon;
+  if (!state.slotAmmo) state.slotAmmo = { 1: 0, 2: 0, 3: 1, 4: 0 };
+  if (!state.reserveAmmo) state.reserveAmmo = { 1: 0, 2: 0, 4: 0 };
+  state.slotAmmo[targetSlot] = wInfo.maxAmmo || 30;
+  state.reserveAmmo[targetSlot] = (state.reserveAmmo[targetSlot] || 0) + 30;
+  state.ammo = state.slotAmmo[targetSlot];
+
+  const slotEl = document.getElementById(`slot-${targetSlot}`);
+  if (slotEl) { slotEl.innerHTML = wInfo.icon || '🔫'; slotEl.title = `Key ${targetSlot}: ${wInfo.name}`; }
+  switchSlot(targetSlot);
+  updateAmmoUI();
+  updateSlotBarVisibility();
+  updateBackpackUI();
+  if (window.soundFX && window.soundFX.playLootPickup) window.soundFX.playLootPickup();
+  showGlobalNotification(`🔫 ${wInfo.name} ${targetSlot}. slota kuşandı!`, 'success');
+};
+
+window.lootCrateAmmo = function() {
+  if (!currentInspectedCrate) return;
+  const crate = currentInspectedCrate;
+  if (!state.reserveAmmo) state.reserveAmmo = { 1: 0, 2: 0, 4: 0 };
+  state.reserveAmmo[state.currentSlot] = (state.reserveAmmo[state.currentSlot] || 0) + crate.ammo;
+  updateAmmoUI();
+  updateBackpackUI();
+  if (window.soundFX && window.soundFX.playLootPickup) window.soundFX.playLootPickup();
+  showGlobalNotification(`📦 +${crate.ammo} Yedek Mermi çantaya eklendi!`, 'success');
+};
+
+window.lootCrateBandages = function() {
+  if (!currentInspectedCrate) return;
+  state.bandages = (state.bandages || 0) + currentInspectedCrate.bandages;
+  const countBadge = document.getElementById('bandage-count-badge');
+  if (countBadge) countBadge.textContent = state.bandages;
+  updateSlotBarVisibility();
+  updateBackpackUI();
+  if (window.soundFX && window.soundFX.playLootPickup) window.soundFX.playLootPickup();
+  showGlobalNotification(`🩹 +${currentInspectedCrate.bandages} Bandaj çantaya eklendi! ([5] ile kullan)`, 'success');
+};
+
+window.lootCrateSilencer = function() {
+  if (!currentInspectedCrate) return;
+  state.hasSilencer = true;
+  if (activeGun) attachSilencerToViewmodel(activeGun);
+  updateAmmoUI();
+  updateBackpackUI();
+  if (window.soundFX && window.soundFX.playSilencerAttach) window.soundFX.playSilencerAttach();
+  showGlobalNotification('🔇 Susturucu takıldı! Silah sesleri ve namlu ateşi gizlendi.', 'success');
+};
+
+window.lootAllFromCurrentCrate = function() {
+  if (!currentInspectedCrate) return;
+  lootDeathCrate(currentInspectedCrate);
+  closeDeathCrateModal();
+};
+
+function spawnDeathCrate(pos, bot) {
+  if (!window.models || !window.models.createDeathCrateModel) return;
+  const crateMesh = window.models.createDeathCrateModel();
+  crateMesh.position.set(pos.x, 0.05, pos.z);
+  scene.add(crateMesh);
+
+  const dropWeapon = (bot && bot.weapon === 'sniper') ? 'Sniper' : ((bot && bot.weapon === 'burst') ? 'Burst Rifle' : ((bot && bot.weapon === 'minigun') ? 'Minigun' : 'AK-47'));
+
+  activeDeathCrates.push({
+    mesh: crateMesh,
+    pos: new THREE.Vector3(pos.x, 0.05, pos.z),
+    weapon: dropWeapon,
+    ammo: 30 + Math.floor(Math.random() * 30),
+    bandages: 1 + Math.floor(Math.random() * 2),
+    hasSilencer: Math.random() < 0.35,
+    collected: false
+  });
+}
+
+function lootDeathCrate(crate, index) {
+  if (!crate || crate.collected) return;
+  crate.collected = true;
+  if (crate.mesh) scene.remove(crate.mesh);
+
+  // Equip weapon if slot 1 or slot 2 is empty, or add to reserve ammo
+  let weaponAcquired = null;
+  const wInfo = ALL_WEAPONS_CATALOG[crate.weapon] || ALL_WEAPONS_CATALOG['AK-47'];
+
+  if (!state.equippedGuns[1]) {
+    state.equippedGuns[1] = crate.weapon;
+    state.slotAmmo[1] = wInfo.maxAmmo || 30;
+    state.reserveAmmo[1] = crate.ammo;
+    state.ammo = state.slotAmmo[1];
+    weaponAcquired = crate.weapon;
+    const s1 = document.getElementById('slot-1');
+    if (s1) { s1.innerHTML = wInfo.icon || '🔫'; s1.title = `Key 1: ${wInfo.name}`; }
+    switchSlot(1);
+  } else if (!state.equippedGuns[2]) {
+    state.equippedGuns[2] = crate.weapon;
+    state.slotAmmo[2] = wInfo.maxAmmo || 30;
+    state.reserveAmmo[2] = crate.ammo;
+    weaponAcquired = crate.weapon;
+    const s2 = document.getElementById('slot-2');
+    if (s2) { s2.innerHTML = wInfo.icon || '🔫'; s2.title = `Key 2: ${wInfo.name}`; }
+    switchSlot(2);
+  } else {
+    // Add looted ammo to current weapon's reserve!
+    if (!state.reserveAmmo) state.reserveAmmo = { 1: 0, 2: 0, 4: 0 };
+    state.reserveAmmo[state.currentSlot] = (state.reserveAmmo[state.currentSlot] || 0) + crate.ammo;
+  }
+
+  // Bandages
+  if (crate.bandages > 0) {
+    state.bandages = (state.bandages || 0) + crate.bandages;
+    const countBadge = document.getElementById('bandage-count-badge');
+    if (countBadge) countBadge.textContent = state.bandages;
+  }
+
+  // Silencer
+  if (crate.hasSilencer && !state.hasSilencer) {
+    state.hasSilencer = true;
+    if (activeGun) attachSilencerToViewmodel(activeGun);
+    if (window.soundFX && window.soundFX.playSilencerAttach) window.soundFX.playSilencerAttach();
+  } else {
+    if (window.soundFX && window.soundFX.playLootPickup) window.soundFX.playLootPickup();
+  }
+
+  updateAmmoUI();
+  updateSlotBarVisibility();
+  updateBackpackUI();
+
+  showGlobalNotification(
+    `🎒 Düşman Çantası Yağmalandı! ${weaponAcquired ? '+ ' + weaponAcquired + ', ' : ''}+${crate.ammo} Mermi, +${crate.bandages} Bandaj${crate.hasSilencer ? ', +Susturucu' : ''}`,
+    'success'
+  );
+}
+
+window.toggleBackpackModal = function() {
+  const modal = document.getElementById('backpack-modal');
+  if (!modal) return;
+  const isOpening = (modal.style.display !== 'flex');
+  if (isOpening) {
+    modal.style.display = 'flex';
+    document.exitPointerLock();
+    updateBackpackUI();
+    if (window.soundFX && window.soundFX.playClick) window.soundFX.playClick();
+  } else {
+    modal.style.display = 'none';
+    if (window.soundFX && window.soundFX.playClick) window.soundFX.playClick();
+    if (state.mode === 'battle' && !state.isPaused && !state.isDead) {
+      renderer.domElement.requestPointerLock();
+    }
+  }
+};
+
+function updateBackpackUI() {
+  const s1Name = document.getElementById('inv-slot1-name');
+  const s1Ammo = document.getElementById('inv-slot1-ammo');
+  const s1Attach = document.getElementById('inv-slot1-attach');
+  const s2Name = document.getElementById('inv-slot2-name');
+  const s2Ammo = document.getElementById('inv-slot2-ammo');
+  const bandagesEl = document.getElementById('inv-bandages');
+  const grenadesEl = document.getElementById('inv-grenades');
+  const silencerEl = document.getElementById('inv-silencer-badge');
+  const healthEl = document.getElementById('inv-health-text');
+
+  if (s1Name) s1Name.textContent = state.equippedGuns[1] || 'Boş (Evden Silah Bul)';
+  if (s1Ammo) s1Ammo.textContent = state.equippedGuns[1] ? `${state.slotAmmo ? (state.slotAmmo[1] || 0) : 0} Mermi` : '0 Mermi';
+  if (s1Attach) {
+    s1Attach.textContent = state.hasSilencer ? '🔇 Susturucu: Takılı' : 'Susturucu: Yok';
+    s1Attach.style.color = state.hasSilencer ? '#4ade80' : '#94a3b8';
+  }
+
+  if (s2Name) s2Name.textContent = state.equippedGuns[2] || 'Boş (Evden Silah Bul)';
+  if (s2Ammo) s2Ammo.textContent = state.equippedGuns[2] ? `${state.slotAmmo ? (state.slotAmmo[2] || 0) : 0} Mermi` : '0 Mermi';
+
+  if (bandagesEl) bandagesEl.textContent = `${state.bandages || 0} Adet`;
+  if (grenadesEl) grenadesEl.textContent = `${state.equippedGuns[4] ? 2 : 0} Adet`;
+  if (silencerEl) {
+    silencerEl.textContent = state.hasSilencer ? 'Var (Kuşanıldı)' : 'Yok';
+    silencerEl.style.color = state.hasSilencer ? '#38bdf8' : '#94a3b8';
+  }
+  if (healthEl) healthEl.textContent = `${state.health}/150`;
+}
+
 function startReload() {
   const weapon = getCurrentWeapon();
   if (state.isReloading || state.currentSlot === 3 || state.ammo === weapon.maxAmmo) return;
+
+  // In PUBG mode: ammo is strictly limited to reserve!
+  if (currentSelectedMap === 'pubg') {
+    if (!state.reserveAmmo) state.reserveAmmo = { 1: 0, 2: 0, 4: 0 };
+    const res = state.reserveAmmo[state.currentSlot] || 0;
+    if (res <= 0) {
+      showGlobalNotification('❌ Yedek mermin tükendi! Evleri veya ölü çantalarını arayarak mermi bul!', 'warning');
+      if (window.soundFX && window.soundFX.playClick) window.soundFX.playClick();
+      return;
+    }
+  }
 
   state.isReloading = true;
   state.reloadTimer = 0;
@@ -2006,11 +3394,57 @@ function updateHealthUI() {
   text.textContent = Math.ceil(state.health);
 }
 
+
+function updateSlotBarVisibility() {
+  const s1 = document.getElementById('slot-1');
+  const s2 = document.getElementById('slot-2');
+  const s3 = document.getElementById('slot-3');
+  const s4 = document.getElementById('slot-4');
+  const s5 = document.getElementById('slot-5');
+
+  if (currentSelectedMap === 'pubg') {
+    // In PUBG mode: slots only appear when items are found/looted!
+    if (s1) s1.style.display = state.equippedGuns[1] ? 'flex' : 'none';
+    if (s2) s2.style.display = state.equippedGuns[2] ? 'flex' : 'none';
+    if (s3) s3.style.display = 'flex'; // Melee knife always available
+    if (s4) s4.style.display = state.equippedGuns[4] ? 'flex' : 'none';
+    if (s5) s5.style.display = (state.bandages && state.bandages > 0) ? 'flex' : 'none';
+  } else {
+    // Standard mode: show all
+    if (s1) s1.style.display = 'flex';
+    if (s2) s2.style.display = 'flex';
+    if (s3) s3.style.display = 'flex';
+    if (s4) s4.style.display = 'flex';
+    if (s5) s5.style.display = 'flex';
+  }
+}
+
 function updateAmmoUI() {
-  const weapon = getCurrentWeapon();
-  document.getElementById('ammo-current').innerHTML = `${state.currentSlot === 3 ? '∞' : state.ammo} <span style="font-size: 26px; color: #8fa0c9;">III</span>`;
   const nameEl = document.getElementById('ammo-gun-name');
-  if (nameEl) nameEl.textContent = weapon.name;
+  const ammoEl = document.getElementById('ammo-current');
+
+  if ((state.currentSlot === 1 && !state.equippedGuns[1]) || (state.currentSlot === 2 && !state.equippedGuns[2])) {
+    if (ammoEl) ammoEl.innerHTML = `0 <span style="font-size: 26px; color: #8fa0c9;">III</span>`;
+    if (nameEl) nameEl.textContent = 'Boş (Evden Silah Bul)';
+    return;
+  }
+
+  const weapon = getCurrentWeapon();
+  if (ammoEl) {
+    if (state.currentSlot === 3) {
+      ammoEl.innerHTML = `∞ <span style="font-size: 22px; color: #8fa0c9;">BIÇAK</span>`;
+    } else if (currentSelectedMap === 'pubg') {
+      const res = state.reserveAmmo ? (state.reserveAmmo[state.currentSlot] || 0) : 0;
+      ammoEl.innerHTML = `${state.ammo} <span style="font-size: 20px; color: #38bdf8;">/ ${res}</span>`;
+    } else {
+      ammoEl.innerHTML = `${state.ammo} <span style="font-size: 26px; color: #8fa0c9;">III</span>`;
+    }
+  }
+  if (nameEl) {
+    nameEl.textContent = (state.hasSilencer && (state.currentSlot === 1 || state.currentSlot === 2))
+      ? `${weapon.name} [🔇 Susturucu]`
+      : weapon.name;
+  }
 }
 
 function updateMatchTimer() {
@@ -2087,9 +3521,18 @@ function gameLoop(time) {
 
   if (flashTimer > 0) {
     flashTimer -= delta;
-    if (flashTimer <= 0 && activeGun && activeGun.flash) {
-      activeGun.flash.material.opacity = 0;
+    if (activeGun && activeGun.flash) {
+      const progress = Math.max(0, flashTimer / 0.04);
+      if (activeGun.flash.mat) activeGun.flash.mat.opacity = progress;
+      else if (activeGun.flash.material) activeGun.flash.material.opacity = progress;
     }
+    if (flashTimer <= 0 && activeGun && activeGun.flash) {
+      activeGun.flash.visible = false;
+      if (activeGun.flash.mat) activeGun.flash.mat.opacity = 0;
+      else if (activeGun.flash.material) activeGun.flash.material.opacity = 0;
+    }
+  } else if (activeGun && activeGun.flash && activeGun.flash.visible) {
+    activeGun.flash.visible = false;
   }
 
   // Smooth Weapon Deploy / Switch Spring Animation
@@ -2161,19 +3604,52 @@ function gameLoop(time) {
     activeGun.barrelGroup.rotation.z += delta * 45;
   }
 
-  // Lobby Orbit
+  // Lobby Orbit & Dynamic Scenery Animation
   if (state.mode === 'lobby') {
-    const radius = 4.2;
-    const camX = Math.sin(t * 0.4) * 0.6;
-    const camZ = radius + Math.cos(t * 0.4) * 0.4;
-    camera.position.set(camX, 2.0, camZ);
-    camera.lookAt(0, 1.4, 0);
+    const camX = Math.sin(t * 0.25) * 0.45;
+    const camZ = 4.6 + Math.cos(t * 0.25) * 0.25;
+    camera.position.set(camX, 2.1, camZ);
+    camera.lookAt(0, 1.4, -2.5);
 
+    // Player Heroic Idle Pose
     if (localAvatar) {
-      localAvatar.group.rotation.y = Math.sin(t * 0.5) * 0.15;
-      localAvatar.leftArm.rotation.x = Math.sin(t * 1.5) * 0.08;
-      localAvatar.rightArm.rotation.x = -Math.sin(t * 1.5) * 0.08;
-      localAvatar.head.rotation.y = Math.sin(t * 0.8) * 0.12;
+      localAvatar.group.rotation.y = Math.sin(t * 0.4) * 0.12;
+      if (localAvatar.leftArm) localAvatar.leftArm.rotation.x = -1.2 + Math.sin(t * 1.2) * 0.05;
+      if (localAvatar.rightArm) localAvatar.rightArm.rotation.x = -1.35 + Math.cos(t * 1.2) * 0.05;
+      if (localAvatar.head) localAvatar.head.rotation.y = Math.sin(t * 0.6) * 0.14;
+    }
+
+    // Animate 3D Lobby Pedestals, Floating Weapons, Runes & Particles
+    if (lobbyEnv && lobbyEnv.userData) {
+      // Rotating & bobbing pedestal weapons (Quick TDM & Quick Arcade)
+      if (lobbyEnv.userData.pedestalWeapons) {
+        lobbyEnv.userData.pedestalWeapons.forEach(w => {
+          w.rotation.y += delta * 1.4;
+          if (w.userData && w.userData.baseY !== undefined) {
+            w.position.y = w.userData.baseY + Math.sin(t * 2.2 + (w.userData.phase || 0)) * 0.07;
+          }
+        });
+      }
+      // Glowing rune circles rotation
+      if (lobbyEnv.userData.runes) {
+        lobbyEnv.userData.runes.forEach(r => {
+          r.mesh.rotation.z += delta * r.speed;
+        });
+      }
+      // Ambient lobby bots subtle idle animation
+      if (lobbyEnv.userData.ambientBots) {
+        lobbyEnv.userData.ambientBots.forEach((b, idx) => {
+          if (b.head) b.head.rotation.y = Math.sin(t * 0.6 + idx * 1.5) * 0.18;
+          if (b.group) b.group.position.y = Math.sin(t * 1.2 + idx) * 0.02;
+        });
+      }
+      // Floating sci-fi energy motes
+      if (lobbyEnv.userData.particles) {
+        lobbyEnv.userData.particles.forEach(p => {
+          p.position.y = p.userData.baseY + Math.sin(t * p.userData.speed + p.userData.phase) * 0.35;
+          p.rotation.y += delta * 0.6;
+        });
+      }
     }
   }
 
@@ -2188,73 +3664,237 @@ function gameLoop(time) {
       arenaData.clouds.rotation.y += delta * 0.006;
     }
 
-    // Player Movement Physics
-    if (!state.isDead) {
-      const speed = keys.shift ? 16 : 10.5;
-      const move = new THREE.Vector3();
-      if (keys.w) move.z -= 1;
-      if (keys.s) move.z += 1;
-      if (keys.a) move.x -= 1;
-      if (keys.d) move.x += 1;
-      move.normalize();
-      move.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerRotY);
+    // Skydive / Parachute Flight Update
+    if (skydiveState.active && state.mode === 'battle' && !state.isPaused && !state.isDead) {
+      updateSkydivePhysics(delta);
+    }
 
-      playerPos.x += move.x * speed * delta;
-      playerPos.z += move.z * speed * delta;
+    // Player / Vehicle Movement Physics
+    if (!state.isDead && !skydiveState.active) {
+      if (currentDrivenVehicle) {
+        // Vehicle Driving Physics (PUBG UAZ)
+        const veh = currentDrivenVehicle;
+        const isShift = keys.shift;
+        const isSpace = keys.space;
 
-      // Solid obstacle collisions and ground height
-      const groundY = checkAndResolveCollisions(playerPos, 0.75);
-
-      playerPos.x = Math.max(-145, Math.min(145, playerPos.x));
-      playerPos.z = Math.max(-145, Math.min(145, playerPos.z));
-
-      if (keys.space && isGrounded) {
-        velocity.y = 9.2;
-        isGrounded = false;
-        if (window.soundFX && window.soundFX.playJump) {
-          window.soundFX.playJump();
+        // Acceleration / Reverse
+        const currentMaxSpeed = isShift ? veh.maxSpeed * 1.35 : veh.maxSpeed;
+        if (keys.w) {
+          veh.speed += veh.accel * (isShift ? 1.4 : 1.0) * delta;
+        } else if (keys.s) {
+          veh.speed -= veh.brakeDecel * delta;
+        } else {
+          veh.speed *= Math.pow(veh.friction, delta * 60);
         }
-      }
 
-      velocity.y -= 24 * delta;
-      playerPos.y += velocity.y * delta;
+        if (isSpace) {
+          veh.speed *= Math.pow(0.92, delta * 60);
+        }
 
-      if (playerPos.y <= groundY) {
-        playerPos.y = groundY;
-        velocity.y = 0;
-        isGrounded = true;
-      }
+        veh.speed = Math.max(veh.reverseMax, Math.min(currentMaxSpeed, veh.speed));
 
-      // Jump Pads
-      getActiveJumpPads().forEach(([jx, jy, jz]) => {
-        const d = Math.sqrt((playerPos.x - jx) ** 2 + (playerPos.z - jz) ** 2);
-        if (d < 3.2 && playerPos.y < 1.2) {
-          velocity.y = 20;
+        // Steering
+        const steerTarget = (keys.a ? 0.45 : (keys.d ? -0.45 : 0));
+        veh.steerAngle += (steerTarget - veh.steerAngle) * Math.min(1, delta * 8);
+
+        if (Math.abs(veh.speed) > 1.0) {
+          const turnFactor = (veh.speed > 0 ? 1 : -1);
+          veh.angle += veh.steerAngle * veh.turnSpeed * turnFactor * (Math.abs(veh.speed) / currentMaxSpeed) * delta;
+        }
+
+        // Forward motion vector
+        const speedMs = veh.speed * (1000 / 3600); // km/h to m/s
+        veh.vel.x = -Math.sin(veh.angle) * speedMs;
+        veh.vel.z = -Math.cos(veh.angle) * speedMs;
+
+        const newVehX = veh.pos.x + veh.vel.x * delta;
+        const newVehZ = veh.pos.z + veh.vel.z * delta;
+
+        // Obstacle collision check for vehicle
+        const testPos = new THREE.Vector3(newVehX, veh.pos.y, newVehZ);
+        const groundY = checkAndResolveCollisions(testPos, 1.8);
+
+        const bLimitX = (currentSelectedMap === 'pubg') ? 1250 : 145;
+        const bLimitZ = (currentSelectedMap === 'pubg') ? 1250 : 145;
+        veh.pos.x = Math.max(-bLimitX, Math.min(bLimitX, testPos.x));
+        veh.pos.z = Math.max(-bLimitZ, Math.min(bLimitZ, testPos.z));
+        veh.pos.y = groundY;
+
+        // Apply to vehicle 3D group
+        veh.group.position.copy(veh.pos);
+        veh.group.rotation.y = veh.angle;
+
+        // Visual front wheel steering
+        if (veh.wheels && veh.wheels.flPivot && veh.wheels.frPivot) {
+          veh.wheels.flPivot.rotation.y = veh.steerAngle;
+          veh.wheels.frPivot.rotation.y = veh.steerAngle;
+        }
+
+        // Visual tire spinning
+        const wheelCircumference = 2 * Math.PI * 0.85;
+        const spinAngle = (speedMs * delta / wheelCircumference) * Math.PI * 2;
+        if (veh.wheels.flTire) {
+          veh.wheels.flTire.rotation.x += spinAngle;
+          veh.wheels.frTire.rotation.x += spinAngle;
+          veh.wheels.rlTire.rotation.x += spinAngle;
+          veh.wheels.rrTire.rotation.x += spinAngle;
+        }
+
+        // Sync player position with vehicle
+        playerPos.copy(veh.pos);
+        playerRotY = veh.angle;
+
+        // 3rd Person Free-Look Orbit Camera (Mouse looks freely around vehicle!)
+        const totalYaw = veh.angle + vehCamYaw;
+        const camDist = 11.5 * Math.cos(vehCamPitch);
+        const camH = 3.6 + 11.5 * Math.sin(vehCamPitch);
+        const camX = veh.pos.x + Math.sin(totalYaw) * camDist;
+        const camZ = veh.pos.z + Math.cos(totalYaw) * camDist;
+        camera.position.set(camX, veh.pos.y + Math.max(1.2, camH), camZ);
+        camera.lookAt(veh.pos.x, veh.pos.y + 1.8, veh.pos.z);
+
+        // Speedometer UI
+        const spEl = document.getElementById('vehicle-speed');
+        if (spEl) spEl.textContent = Math.abs(Math.round(veh.speed));
+
+        // Network sync (throttle ~40ms)
+        if (socket && socket.readyState === WebSocket.OPEN && (!veh.lastSyncTime || time - veh.lastSyncTime > 40)) {
+          veh.lastSyncTime = time;
+          socket.send(JSON.stringify({
+            type: 'vehicle_update',
+            vehicleIndex: 0,
+            x: veh.pos.x, y: veh.pos.y, z: veh.pos.z,
+            angle: veh.angle,
+            steerAngle: veh.steerAngle,
+            speed: veh.speed
+          }));
+        }
+      } else {
+        // Standard On-Foot Player Movement
+        const speed = keys.shift ? 16 : 10.5;
+        const move = new THREE.Vector3();
+        if (keys.w) move.z -= 1;
+        if (keys.s) move.z += 1;
+        if (keys.a) move.x -= 1;
+        if (keys.d) move.x += 1;
+        move.normalize();
+        move.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerRotY);
+
+        playerPos.x += move.x * speed * delta;
+        playerPos.z += move.z * speed * delta;
+
+        // Solid obstacle collisions and ground height
+        const groundY = checkAndResolveCollisions(playerPos, 0.75);
+
+        const boundaryLimitX = (currentSelectedMap === 'pubg') ? 1250 : 145;
+        const boundaryLimitZ = (currentSelectedMap === 'pubg') ? 1250 : 145;
+        playerPos.x = Math.max(-boundaryLimitX, Math.min(boundaryLimitX, playerPos.x));
+        playerPos.z = Math.max(-boundaryLimitZ, Math.min(boundaryLimitZ, playerPos.z));
+
+        if (keys.space && isGrounded) {
+          velocity.y = 9.2;
           isGrounded = false;
-          window.soundFX.playJumpPad();
+          if (window.soundFX && window.soundFX.playJump) {
+            window.soundFX.playJump();
+          }
         }
-      });
 
-      // Camera FPS
-      const targetFOV = state.isADS ? 48 : 70;
-      camera.fov += (targetFOV - camera.fov) * delta * 15;
-      camera.updateProjectionMatrix();
+        velocity.y -= 24 * delta;
+        playerPos.y += velocity.y * delta;
 
-      camera.position.set(playerPos.x, playerPos.y + 1.8, playerPos.z);
-      camera.rotation.set(headPitch, playerRotY, 0, 'YXZ');
+        if (playerPos.y <= groundY) {
+          playerPos.y = groundY;
+          velocity.y = 0;
+          isGrounded = true;
+        }
 
-      // Network sync player position every 40ms
-      netSyncTimer += delta;
-      if (netSyncTimer > 0.04 && socket && socket.readyState === WebSocket.OPEN) {
-        netSyncTimer = 0;
-        socket.send(JSON.stringify({
-          type: 'move',
-          x: playerPos.x,
-          y: playerPos.y,
-          z: playerPos.z,
-          rotY: playerRotY,
-          headPitch: headPitch
-        }));
+        // Jump Pads
+        getActiveJumpPads().forEach(([jx, jy, jz]) => {
+          const d = Math.sqrt((playerPos.x - jx) ** 2 + (playerPos.z - jz) ** 2);
+          if (d < 3.2 && playerPos.y < 1.2) {
+            velocity.y = 20;
+            isGrounded = false;
+            window.soundFX.playJumpPad();
+          }
+        });
+
+        // Camera FPS
+        const targetFOV = state.isADS ? 48 : 70;
+        camera.fov += (targetFOV - camera.fov) * delta * 15;
+        camera.updateProjectionMatrix();
+
+        camera.position.set(playerPos.x, playerPos.y + 1.8, playerPos.z);
+        camera.rotation.set(headPitch, playerRotY, 0, 'YXZ');
+
+        // Ground Interaction Proximity Check (Loot Items & Parked Vehicles)
+        const promptEl = document.getElementById('interaction-prompt');
+        const promptTextEl = document.getElementById('interaction-text');
+        let nearbyInteractable = null;
+
+        const activeMap = getActiveMapData();
+
+        // 1. Check nearby vehicles to drive
+        if (activeMap && activeMap.vehicles) {
+          for (let vi = 0; vi < activeMap.vehicles.length; vi++) {
+            const v = activeMap.vehicles[vi];
+            const dist = playerPos.distanceTo(v.pos);
+            if (dist < 4.8) {
+              nearbyInteractable = {
+                type: 'vehicle',
+                vehicle: v,
+                index: vi,
+                text: '[E] Arabaya Bin / Sür (PUBG UAZ)'
+              };
+              break;
+            }
+          }
+        }
+
+        // 2. Check nearby loot items if not near vehicle
+        if (!nearbyInteractable && activeMap && activeMap.lootItems) {
+          for (let li = 0; li < activeMap.lootItems.length; li++) {
+            const loot = activeMap.lootItems[li];
+            if (!loot.collected) {
+              if (loot.mesh) {
+                loot.mesh.rotation.y += delta * 1.5;
+                loot.mesh.position.y = loot.pos.y + 0.35 + Math.sin(t * 3 + li) * 0.08;
+              }
+              const dist = playerPos.distanceTo(loot.pos);
+              if (dist < 3.2) {
+                nearbyInteractable = {
+                  type: 'loot',
+                  loot: loot,
+                  index: li,
+                  text: `[F] ${loot.name}`
+                };
+                break;
+              }
+            }
+          }
+        }
+
+        if (nearbyInteractable && promptEl && promptTextEl) {
+          promptTextEl.textContent = nearbyInteractable.text;
+          promptEl.style.display = 'block';
+          window.activeInteractionTarget = nearbyInteractable;
+        } else if (promptEl) {
+          promptEl.style.display = 'none';
+          window.activeInteractionTarget = null;
+        }
+
+        // Network sync player position every 40ms
+        netSyncTimer += delta;
+        if (netSyncTimer > 0.04 && socket && socket.readyState === WebSocket.OPEN) {
+          netSyncTimer = 0;
+          socket.send(JSON.stringify({
+            type: 'move',
+            x: playerPos.x,
+            y: playerPos.y,
+            z: playerPos.z,
+            rotY: playerRotY,
+            headPitch: headPitch
+          }));
+        }
       }
     }
 
@@ -2422,7 +4062,7 @@ function gameLoop(time) {
 
     // CS2 Tactical Bots
     bots.forEach((bot, bIdx) => {
-      if (bot.health > 0 && !bot.isDead) {
+      if (bot.health > 0 && !bot.isDead && !bot.isSkydiving) {
         const bp = bot.avatar.group.position;
         if (bot.vy === undefined) bot.vy = 0;
         bot.vy -= 22 * delta;
@@ -2441,9 +4081,10 @@ function gameLoop(time) {
           bot.decisionTimer = time + 1400 + Math.random() * 1200;
           let bestTarget = null;
 
-          if (state.matchType === 'TDM') {
+          const isTeam = (state.matchType === 'TDM' || state.matchType === '2v2' || state.matchType === 'Squad');
+          if (isTeam) {
             if (bot.team === 'blue') {
-              // Teammate Bot: ONLY targets Red enemy bots! NEVER targets the player!
+              // Teammate Bot: Stays near player and ONLY targets Red enemy bots! NEVER targets the player!
               const enemyBots = bots.filter((other, idx) => idx !== bIdx && other.team === 'red' && other.health > 0 && !other.isDead);
               if (enemyBots.length > 0) {
                 let closest = enemyBots[0];
@@ -2524,10 +4165,10 @@ function gameLoop(time) {
           bot.avatar.rightLeg.rotation.x *= 0.8;
         }
 
-        // BOTS ONLY SHOOT IF WITHIN 38M AND LINE OF SIGHT IS NOT BLOCKED BY A WALL!
-        const hasLOS = !isLineOfSightBlocked(bp.clone().add(new THREE.Vector3(0, 1.4, 0)), targetPos);
-
-        if (dist < 38 && hasLOS && time > bot.shootCooldown && (!target.isPlayer || !state.isDead)) {
+        // BOTS ONLY SHOOT IF WITHIN 38M, COOLDOWN READY, AND LINE OF SIGHT NOT BLOCKED!
+        if (dist < 38 && time > bot.shootCooldown && (!target.isPlayer || !state.isDead)) {
+          const hasLOS = !isLineOfSightBlocked(bp.clone().add(new THREE.Vector3(0, 1.4, 0)), targetPos);
+          if (hasLOS) {
           bot.burstCount++;
           const origin = bp.clone().add(new THREE.Vector3(0, 1.4, 0));
           const shootDir = new THREE.Vector3().subVectors(targetPos, origin).normalize();
@@ -2548,7 +4189,7 @@ function gameLoop(time) {
 
           if (target.isPlayer && !state.isDead) {
             // In TDM, Blue team bots NEVER damage the player!
-            if (state.matchType === 'TDM' && bot.team === 'blue') {
+            if ((state.matchType === 'TDM' || state.matchType === '2v2') && bot.team === 'blue') {
               // Friendly fire blocked
             } else if (Math.random() < 0.28) {
               state.health = Math.max(0, state.health - (bot.weapon === 'pistol' ? 18 : 12));
@@ -2600,6 +4241,7 @@ function gameLoop(time) {
                 target.bot.avatar.group.rotation.x = -Math.PI / 2;
                 target.bot.avatar.group.position.y = 0.25;
                 if (target.bot.avatar.hpGroup) target.bot.avatar.hpGroup.visible = false;
+                spawnDeathCrate(target.bot.avatar.group.position, target.bot);
 
                 setTimeout(() => {
                   target.bot.health = 100;
@@ -2622,6 +4264,7 @@ function gameLoop(time) {
           } else {
             bot.shootCooldown = time + (bot.weapon === 'pistol' ? 220 : 110);
           }
+        }
         }
       }
     });
@@ -4531,10 +6174,18 @@ function inviteFriendToRoom(targetUsername) {
 window.inviteFriendToRoom = inviteFriendToRoom;
 window.inviteFriendToRoom = inviteFriendToRoom;
 
-// Global initialization on DOM ready
-window.addEventListener('DOMContentLoaded', () => {
+// Global initialization on DOM ready (with fallback if DOM is already ready)
+function initAllGameSystems() {
   init();
   fetchUserProfile();
   updateCurrencyUI();
-});
+}
+
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', initAllGameSystems);
+} else {
+  // Document already ready, initialize immediately!
+  initAllGameSystems();
+}
+
 
