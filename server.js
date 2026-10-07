@@ -1009,13 +1009,28 @@ app.post('/api/rooms/create', (req, res) => {
   });
 });
 
-const publicDir = fs.existsSync(path.join(__dirname, 'public')) ? path.join(__dirname, 'public') : __dirname;
+// Universal static router: seamlessly serves assets whether in public/js/ or flat root (GitHub structure)
+app.use((req, res, next) => {
+  if (req.path.endsWith('.js') || req.path.endsWith('.css')) {
+    const fileName = path.basename(req.path);
+    const candidates = [
+      path.join(__dirname, 'public', 'js', fileName),
+      path.join(__dirname, 'public', fileName),
+      path.join(__dirname, 'js', fileName),
+      path.join(__dirname, fileName)
+    ];
+    for (const p of candidates) {
+      if (fs.existsSync(p) && fs.statSync(p).isFile()) {
+        res.type(req.path.endsWith('.css') ? 'text/css' : 'application/javascript');
+        return res.sendFile(p);
+      }
+    }
+  }
+  next();
+});
 
-// Serve static assets accurately from public and public/js
+const publicDir = fs.existsSync(path.join(__dirname, 'public')) ? path.join(__dirname, 'public') : __dirname;
 app.use(express.static(publicDir));
-if (fs.existsSync(path.join(publicDir, 'js'))) {
-  app.use('/js', express.static(path.join(publicDir, 'js')));
-}
 app.use(express.static(__dirname));
 
 // ==========================================

@@ -15,6 +15,7 @@
   <script src="js/three.min.js"></script>
   <script>
     if (typeof THREE === 'undefined') {
+      document.write('<script src="three.min.js"><\/script>');
       document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>');
     }
   </script>
@@ -1369,10 +1370,34 @@
     </div>
   </div>
 
-  <!-- Game Scripts with Cache Busters -->
-  <script src="js/audio.js?v=20261001_1"></script>
-  <script src="js/models.js?v=20261001_1"></script>
-  <script src="js/game.js?v=20261001_1"></script>
+  <!-- Game Scripts with Dual-Path Fallback (works both inside /js/ folder AND flat root) -->
+  <script>
+    function loadGameScript(nestedPath, flatPath) {
+      return new Promise((resolve) => {
+        const s = document.createElement('script');
+        s.src = nestedPath;
+        s.onload = resolve;
+        s.onerror = () => {
+          if (flatPath) {
+            const fallback = document.createElement('script');
+            fallback.src = flatPath;
+            fallback.onload = resolve;
+            fallback.onerror = resolve;
+            document.body.appendChild(fallback);
+          } else {
+            resolve();
+          }
+        };
+        document.body.appendChild(s);
+      });
+    }
+
+    (async function initClientScripts() {
+      await loadGameScript('js/audio.js?v=20261007_4', 'audio.js?v=20261007_4');
+      await loadGameScript('js/models.js?v=20261007_4', 'models.js?v=20261007_4');
+      await loadGameScript('js/game.js?v=20261007_4', 'game.js?v=20261007_4');
+    })();
+  </script>
 
   <!-- PUBG AIRPLANE & SKYDIVE OVERLAY -->
   <div id="skydive-hud" style="display: none; position: fixed; top: 16%; left: 50%; transform: translateX(-50%); text-align: center; pointer-events: none; z-index: 1000; font-family: 'Outfit', sans-serif;">
