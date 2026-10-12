@@ -204,7 +204,7 @@
     <div class="mode-modal-card">
       <button class="btn-close-modal" onclick="closeModeModal()">✕</button>
       
-      <div class="mode-grid-top">
+      <div class="mode-grid-top" style="grid-template-columns: repeat(4, 1fr);">
         <div class="mode-tile-btn" onclick="startBattle('FFA')">
           <div class="mode-badge-tag tag-hot">🔥 HOT</div>
           <div style="font-size: 36px;">🏆</div>
@@ -214,6 +214,11 @@
           <div class="mode-badge-tag tag-new">NEW!</div>
           <div style="font-size: 36px;">🔫</div>
           <div class="mode-tile-title">Corro Modu</div>
+        </div>
+        <div class="mode-tile-btn" onclick="startBattle('pubg')" style="border-color: rgba(250, 204, 21, 0.5);">
+          <div class="mode-badge-tag" style="background: linear-gradient(135deg, #eab308, #ca8a04); color: #000; font-weight: 900;">SURVIVAL</div>
+          <div style="font-size: 36px;">🪂</div>
+          <div class="mode-tile-title">PUBG Erangel</div>
         </div>
         <div class="mode-tile-btn" onclick="openPrivateGameModal()">
           <div style="font-size: 36px;">👥</div>
@@ -298,109 +303,7 @@
     </div>
   </div>
 
-  <!-- PUBG & CUSTOM ROOM PRE-MATCH TEAM SELECTION & WAITING LOBBY MODAL -->
-  <div id="pubg-team-lobby-modal" class="mode-modal-overlay" style="display: none; z-index: 99999;">
-    <div class="pubg-team-lobby-card">
-      
-      <!-- Top Room Information Bar -->
-      <div class="pubg-lobby-header">
-        <div class="pubg-lobby-title-box">
-          <div class="pubg-lobby-title">🎖️ PUBG BEKLEME SALONU &amp; TAKIM SEÇİMİ</div>
-          <div class="pubg-lobby-badges">
-            <span class="pubg-badge-pill" id="pubg-lobby-code" onclick="copyLobbyCode()" title="Tıkla ve Kodu Kopyala" style="cursor: pointer;">
-              🔑 Oda ID: <span id="lobby-code-val" style="color: #00f0ff; font-weight: 900;">VECK-XXXX</span> <span style="font-size:10px; color:#ffd700;">(Kopyala 📋)</span>
-            </span>
-            <span class="pubg-badge-pill" id="pubg-lobby-map">🗺️ 8000M Dev Erangel Haritası &amp; Araçlar</span>
-            <span class="pubg-badge-pill" id="pubg-lobby-count" style="color:#00f0ff; border-color:#00f0ff;">👥 1 / 8 Oyuncu</span>
-          </div>
-        </div>
-        <button class="btn-close-modal" onclick="leavePubgTeamLobby()">✕</button>
-      </div>
 
-      <!-- Mode Selector Switcher (Host controls mode) -->
-      <div class="pubg-lobby-mode-switch" id="pubg-mode-switch-row">
-        <button class="pubg-mode-btn active" id="btn-mode-team" onclick="setLobbyGameMode('TDM')">
-          👥 Takımlı (Mavi vs Kırmızı)
-        </button>
-        <button class="pubg-mode-btn" id="btn-mode-solo" onclick="setLobbyGameMode('FFA')">
-          🎯 Herkes Tek (Solo Hayatta Kalma)
-        </button>
-      </div>
-
-      <!-- Main Team Columns (When in Takımlı Mode) -->
-      <div id="pubg-team-view" class="pubg-teams-container">
-        
-        <!-- Blue Team Column -->
-        <div class="pubg-team-col pubg-blue-col">
-          <div class="pubg-team-header">
-            <div class="pubg-team-name" style="color: #38bdf8;">
-              <span>🔵 MAVİ TAKIM (Takım 1)</span>
-              <span class="pubg-team-count" id="blue-team-count">0 / 4</span>
-            </div>
-            <div style="font-size: 11px; color: #94a3b8;">Güney / Pochinki Sektörü • 🚙 Mavi UAZ Jip Hazır</div>
-          </div>
-          
-          <div class="pubg-slots-list" id="blue-slots-container">
-            <!-- 4 Blue slots generated dynamically -->
-          </div>
-
-          <button class="btn-switch-team btn-switch-blue" onclick="choosePlayerTeam('blue')">
-            🔵 Bu Takıma Geç (Mavi)
-          </button>
-        </div>
-
-        <!-- VS Divider Badge -->
-        <div class="pubg-vs-badge">VS</div>
-
-        <!-- Red Team Column -->
-        <div class="pubg-team-col pubg-red-col">
-          <div class="pubg-team-header">
-            <div class="pubg-team-name" style="color: #f87171;">
-              <span>🔴 KIRMIZI TAKIM (Takım 2)</span>
-              <span class="pubg-team-count" id="red-team-count">0 / 4</span>
-            </div>
-            <div style="font-size: 11px; color: #94a3b8;">Kuzey / Rozhok Sektörü • 🚙 Kırmızı UAZ Jip Hazır</div>
-          </div>
-
-          <div class="pubg-slots-list" id="red-slots-container">
-            <!-- 4 Red slots generated dynamically -->
-          </div>
-
-          <button class="btn-switch-team btn-switch-red" onclick="choosePlayerTeam('red')">
-            🔴 Bu Takıma Geç (Kırmızı)
-          </button>
-        </div>
-
-      </div>
-
-      <!-- Solo Slots View (When in Herkes Tek Mode) -->
-      <div id="pubg-solo-view" class="pubg-solo-container" style="display: none;">
-        <div class="pubg-solo-grid" id="solo-slots-container">
-          <!-- 8 Solo slots generated dynamically -->
-        </div>
-      </div>
-
-      <!-- Bottom Action Controls -->
-      <div class="pubg-lobby-footer">
-        <button class="btn-lobby-secondary" id="btn-fill-bots" onclick="toggleFillLobbyBots()">
-          🤖 Boş Yerleri Botlarla Doldur (8/8 Yap)
-        </button>
-
-        <div style="display: flex; align-items: center; gap: 12px;">
-          <div id="guest-waiting-text" style="display: none; color: #facc15; font-size: 13px; font-weight: 800;">
-            ⏳ Kurucunun savaşı başlatması bekleniyor...
-          </div>
-          <button class="btn-lobby-start" id="btn-start-pubg-match" onclick="triggerHostStartMatch()">
-            🚀 OYUNU BAŞLAT (UÇAK HAVALANSIN) ➔
-          </button>
-          <button class="btn-lobby-leave" onclick="leavePubgTeamLobby()">
-            🚪 Ayrıl
-          </button>
-        </div>
-      </div>
-
-    </div>
-  </div>
 
   <!-- Damage Blood Screen Flash Vignette -->
   <div id="damage-vignette"></div>
@@ -413,7 +316,27 @@
       <div class="veck-logo-title">VECK.IO</div>
       <div class="room-tag-pill">Your Room: <span id="room-code-tag">ME7QQGX8</span></div>
     </div>
-    <div class="veck-chat-prompt">💬 [Enter] Veck Chat</div>
+    <div class="veck-chat-prompt" id="btn-toggle-chat" onclick="openGameChat()" style="cursor: pointer;" title="Sohbeti Aç ([Enter])">💬 [Enter] Veck Chat</div>
+
+    <!-- PUBG Squad Teammates HUD Panel (1-4 Teammate Status & Health Bars) -->
+    <div id="pubg-squad-hud" style="display: none; position: absolute; left: 24px; top: 92px; width: 230px; z-index: 90; pointer-events: none; flex-direction: column; gap: 6px; font-family: 'Outfit', sans-serif;">
+      <!-- Populated dynamically via game.js -->
+    </div>
+
+    <!-- Active In-Game Interactive Chat Box (Elevated above bottom HUD so it never covers health bar) -->
+    <div id="in-game-chat-box" style="position: absolute; left: 24px; bottom: 155px; width: 360px; max-width: calc(100vw - 48px); z-index: 100; pointer-events: none; display: flex; flex-direction: column; gap: 8px;">
+      <div id="chat-messages-container" style="max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; scrollbar-width: none; pointer-events: auto;">
+        <div style="font-size: 11px; color: #38bdf8; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(6px); padding: 5px 10px; border-radius: 6px; border-left: 3px solid #38bdf8; max-width: 90%;">
+          📢 <b>Sistem:</b> [Enter] tuşuna basarak sohbete mesaj yazabilirsiniz!
+        </div>
+      </div>
+      <div id="chat-input-bar" style="display: none; pointer-events: auto; background: rgba(15, 23, 42, 0.92); backdrop-filter: blur(12px); border: 1px solid rgba(56, 189, 248, 0.5); border-radius: 8px; padding: 4px 6px; box-shadow: 0 8px 32px rgba(0,0,0,0.5);">
+        <form onsubmit="sendInGameChatMessage(event); return false;" style="display: flex; gap: 6px; width: 100%; margin: 0;">
+          <input type="text" id="chat-input" placeholder="Mesaj yazın... ([Enter] Gönder / [Esc] Kapat)" maxlength="120" autocomplete="off" style="flex: 1; background: transparent; border: none; outline: none; color: #fff; font-family: inherit; font-size: 12px; font-weight: 600; padding: 6px 8px;" />
+          <button type="submit" id="btn-send-chat" style="background: linear-gradient(135deg, #0284c7, #2563eb); border: none; color: #fff; font-weight: 800; font-size: 11px; padding: 6px 12px; border-radius: 6px; cursor: pointer;">GÖNDER</button>
+        </form>
+      </div>
+    </div>
 
     <!-- Top Center Timer & Scoreboard -->
     <div class="hud-top-center">
@@ -440,11 +363,68 @@
 
     <!-- Bottom Left Health Bar -->
     <div class="hud-bottom-left">
+      <!-- PUBG Equipment Status Widget (Vest, Helmet, Backpack Lv 1-3) -->
+      <div id="pubg-equipment-hud" style="display: none; gap: 8px; margin-bottom: 8px; font-family: 'Outfit', sans-serif;">
+        <div id="hud-vest-box" style="background: rgba(15, 23, 42, 0.85); border: 1.5px solid #38bdf8; border-radius: 8px; padding: 4px 8px; display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 800; color: #fff;">
+          <span>🛡️</span> <span id="hud-vest-lvl">Yelek: Yok</span>
+        </div>
+        <div id="hud-helmet-box" style="background: rgba(15, 23, 42, 0.85); border: 1.5px solid #a855f7; border-radius: 8px; padding: 4px 8px; display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 800; color: #fff;">
+          <span>🪖</span> <span id="hud-helmet-lvl">Kask: Yok</span>
+        </div>
+        <div id="hud-backpack-box" style="background: rgba(15, 23, 42, 0.85); border: 1.5px solid #10b981; border-radius: 8px; padding: 4px 8px; display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 800; color: #fff;">
+          <span>🎒</span> <span id="hud-backpack-lvl">Çanta: Lv1</span>
+        </div>
+      </div>
       <div class="health-bar-pill">
         <div class="health-fill-bar" id="health-fill"></div>
         <div class="health-number-text" id="health-text">150</div>
       </div>
-      <div class="controls-hint-text">[SHIFT] to Slide &nbsp;&nbsp; [E] or [Right-Click] to Aim</div>
+      <div class="controls-hint-text">[SHIFT] to Slide &nbsp;&nbsp; [Right-Click] to Aim &nbsp;&nbsp; [F / E] Etkileşim</div>
+    </div>
+
+    <!-- Authentic PUBG 4X / ACOG Optic Fullscreen Overlay -->
+    <div id="pubg-4x-scope-overlay" style="display: none; position: absolute; inset: 0; pointer-events: none; z-index: 95; overflow: hidden;">
+      <div style="position: absolute; inset: 0; background: radial-gradient(circle 320px at center, transparent 0%, rgba(0,0,0,0.88) 60%, #000 100%);"></div>
+      <div style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 620px; height: 620px; border-radius: 50%; border: 18px solid #0f172a; box-shadow: inset 0 0 40px rgba(0,0,0,0.95), 0 0 50px rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center;">
+        <svg width="600" height="600" viewBox="0 0 600 600" style="position: absolute;">
+          <line x1="0" y1="300" x2="270" y2="300" stroke="#0f172a" stroke-width="3" />
+          <line x1="330" y1="300" x2="600" y2="300" stroke="#0f172a" stroke-width="3" />
+          <line x1="270" y1="300" x2="330" y2="300" stroke="#ef4444" stroke-width="1.5" />
+          <line x1="300" y1="0" x2="300" y2="270" stroke="#0f172a" stroke-width="3" />
+          <line x1="300" y1="270" x2="300" y2="330" stroke="#ef4444" stroke-width="1.5" />
+          <line x1="300" y1="330" x2="300" y2="600" stroke="#0f172a" stroke-width="2" />
+          <polygon points="300,296 295,304 305,304" fill="#ef4444" />
+          <line x1="292" y1="320" x2="308" y2="320" stroke="#ef4444" stroke-width="1.5" />
+          <text x="312" y="324" fill="#ef4444" font-size="10" font-family="'Outfit', sans-serif" font-weight="bold">2</text>
+          <line x1="288" y1="345" x2="312" y2="345" stroke="#ef4444" stroke-width="1.5" />
+          <text x="316" y="349" fill="#ef4444" font-size="10" font-family="'Outfit', sans-serif" font-weight="bold">4</text>
+          <line x1="284" y1="375" x2="316" y2="375" stroke="#ef4444" stroke-width="1.5" />
+          <text x="320" y="379" fill="#ef4444" font-size="10" font-family="'Outfit', sans-serif" font-weight="bold">6</text>
+        </svg>
+        <div id="scope-zoom-indicator" style="position: absolute; bottom: 45px; background: rgba(15,23,42,0.85); border: 1px solid #38bdf8; border-radius: 6px; padding: 3px 12px; color: #38bdf8; font-family: 'Outfit', sans-serif; font-size: 11px; font-weight: 800; letter-spacing: 1px;">
+          4.0x ACOG • 100m - 600m [SCROLL: ZOOM]
+        </div>
+      </div>
+    </div>
+
+    <!-- Revive Beacon Recall Progress Bar -->
+    <div id="beacon-hold-progress" style="display: none; position: absolute; left: 50%; top: 52%; transform: translate(-50%, -50%); background: rgba(15, 23, 42, 0.95); border: 2px solid #00f0ff; border-radius: 14px; padding: 14px 28px; color: #fff; font-family: 'Outfit', sans-serif; text-align: center; z-index: 105; box-shadow: 0 0 35px rgba(0, 240, 255, 0.5); pointer-events: none;">
+      <div style="font-size: 14px; font-weight: 900; color: #00f0ff; margin-bottom: 8px; letter-spacing: 0.5px;">📡 TAKIM ARKADAŞI ÇAĞRILIYOR...</div>
+      <div style="width: 240px; height: 12px; background: #1e293b; border-radius: 6px; overflow: hidden; border: 1px solid #334155;">
+        <div id="beacon-fill-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #00f0ff, #38bdf8); transition: width 0.05s linear;"></div>
+      </div>
+      <div id="beacon-time-text" style="font-size: 12px; color: #38bdf8; font-weight: 800; margin-top: 6px;">⏳ [F] Basılı Tutun: 5.0s</div>
+    </div>
+
+    <!-- Spectator Mode Banner Overlay -->
+    <div id="pubg-spectator-overlay" style="display: none; position: absolute; top: 75px; left: 50%; transform: translateX(-50%); background: rgba(15, 23, 42, 0.94); border: 2px solid #f59e0b; border-radius: 12px; padding: 10px 28px; color: #fff; font-family: 'Outfit', sans-serif; text-align: center; z-index: 105; box-shadow: 0 4px 25px rgba(245, 158, 11, 0.35); pointer-events: auto;">
+      <div style="font-size: 11px; color: #f59e0b; font-weight: 800; letter-spacing: 1.5px;">👁️ TAKIM ARKADAŞI İZLENİYOR (SPECTATOR)</div>
+      <div style="display: flex; align-items: center; justify-content: center; gap: 14px; margin: 4px 0;">
+        <button onclick="cycleSpectatorTarget(-1)" style="background: rgba(245, 158, 11, 0.2); border: 1px solid #f59e0b; color: #f59e0b; font-weight: 900; font-size: 14px; padding: 4px 10px; border-radius: 6px; cursor: pointer;">◀ Önceki</button>
+        <div id="spectator-name" style="font-size: 20px; font-weight: 900; color: #fff;">Oyuncu</div>
+        <button onclick="cycleSpectatorTarget(1)" style="background: rgba(245, 158, 11, 0.2); border: 1px solid #f59e0b; color: #f59e0b; font-weight: 900; font-size: 14px; padding: 4px 10px; border-radius: 6px; cursor: pointer;">Sonraki ▶</button>
+      </div>
+      <div style="font-size: 11px; color: #94a3b8; font-weight: 600;">[← / → veya A / D Ok Tuşları] Oyuncu Değiştir • [Fare] Serbest Bakış • Kurtarma Kulesi (Kişi Başı 1 Hak)</div>
     </div>
 
     <!-- Center Round Status Banners (Screenshots 2 & 4) -->
@@ -482,6 +462,9 @@
     <!-- Dynamic 3D Floating Damage Numbers Layer -->
     <div id="damage-numbers-layer"></div>
 
+    <!-- PUBG 3D Floating Teammate Icons & Distance Layer -->
+    <div id="teammate-markers-layer" style="position: absolute; inset: 0; pointer-events: none; z-index: 85; overflow: hidden;"></div>
+
     <!-- Bottom Right Ammo & 4 Weapon Slots (Screenshot 1 & 2) -->
     <div class="hud-bottom-right">
       <div class="ammo-display-group">
@@ -512,11 +495,12 @@
       <span id="interaction-text">[F] Eşyayı Al</span>
     </div>
 
-    <!-- PUBG UAZ Vehicle Driving HUD (Speedometer & Controls) -->
-    <div id="vehicle-hud" style="display: none; position: absolute; bottom: 95px; left: 50%; transform: translateX(-50%); background: rgba(15, 23, 42, 0.9); border: 2px solid #00f0ff; border-radius: 14px; padding: 12px 28px; color: #fff; font-family: 'Outfit', sans-serif; pointer-events: none; z-index: 100; box-shadow: 0 4px 25px rgba(0, 240, 255, 0.35); text-align: center; min-width: 260px;">
-      <div style="font-size: 11px; color: #94a3b8; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px;">🚙 PUBG UAZ 4x4 SURVIVAL</div>
+    <!-- PUBG Vehicle Driving HUD (Speedometer & Controls) -->
+    <div id="vehicle-hud" style="display: none; position: absolute; bottom: 95px; left: 50%; transform: translateX(-50%); background: rgba(15, 23, 42, 0.92); border: 2px solid #00f0ff; border-radius: 14px; padding: 12px 28px; color: #fff; font-family: 'Outfit', sans-serif; pointer-events: none; z-index: 100; box-shadow: 0 4px 25px rgba(0, 240, 255, 0.35); text-align: center; min-width: 290px;">
+      <div id="vehicle-name-display" style="font-size: 11px; color: #38bdf8; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px;">🚙 ARAÇ SÜRÜŞÜ</div>
       <div style="font-size: 36px; font-weight: 900; color: #38bdf8; line-height: 1.1; margin: 2px 0;"><span id="vehicle-speed">0</span> <span style="font-size: 14px; color: #94a3b8;">KM/H</span></div>
-      <div style="font-size: 11px; color: #cbd5e1; margin-top: 4px; font-weight: 600;">[W/S] Gaz / Fren • [A/D] Direksiyon • [SPACE] El Freni • [SHIFT] Turbo • [H] Korna • [E] İn</div>
+      <div style="font-size: 11px; color: #cbd5e1; margin-top: 4px; font-weight: 600;">[W/S] Gaz / Fren • [A/D] Direksiyon • [SPACE] Drift • [SHIFT] Turbo</div>
+      <div style="font-size: 11px; color: #facc15; margin-top: 3px; font-weight: 700;">🎥 [V] İÇTEN / DIŞTAN KAMERA • [H] Korna • [E] İn</div>
     </div>
 
   </div>
@@ -555,7 +539,7 @@
             <div class="mf-body-purple"></div>
           </div>
         </div>
-        <div class="pause-chat-input-fake">Press "/" to enter chat ➔</div>
+        <div class="pause-chat-input-fake" onclick="resumeGame(); setTimeout(openGameChat, 80);" style="cursor: pointer;" title="Sohbeti Aç ([Enter])">💬 Sohbeti Aç ([Enter]) ➔</div>
         <div class="pause-player-name" id="pause-card-name">ensar</div>
         <div class="pause-player-lvl" id="pause-card-lvl">lvl 0</div>
         <div class="xp-progress-bar">
@@ -861,6 +845,136 @@
           <div style="font-size: 20px;">🔄</div>
           <span>Trade</span>
         </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- PUBG ERANGEL TACTICAL MAP MODAL [M] -->
+  <div id="pubg-tactical-map-modal" class="custom-modal-overlay" style="display: none; z-index: 99999; backdrop-filter: blur(8px); background: rgba(5, 10, 20, 0.88); align-items: center; justify-content: center;">
+    <div style="background: rgba(15, 23, 42, 0.95); border: 2px solid #38bdf8; border-radius: 16px; padding: 20px; box-shadow: 0 0 50px rgba(56, 189, 248, 0.35); max-width: 95vw; max-height: 95vh; display: flex; flex-direction: column; gap: 12px; align-items: center; position: relative;">
+      <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 22px;">🗺️</span>
+          <div>
+            <div style="font-size: 18px; font-weight: 900; color: #fff; letter-spacing: 1px;">PUBG ERANGEL TAKTİK HARİTASI</div>
+            <div style="font-size: 11px; color: #94a3b8; font-weight: 700;">Konum: <span id="map-coord-display" style="color: #38bdf8;">X: 0, Z: 0</span> | Alan: <span style="color: #4ade80;">GÜVENLİ BÖLGE AKTİF</span></div>
+          </div>
+        </div>
+        <button onclick="togglePubgTacticalMap()" style="background: #ef4444; border: none; color: #fff; font-weight: 900; font-size: 14px; width: 32px; height: 32px; border-radius: 8px; cursor: pointer;">✖</button>
+      </div>
+
+      <div style="position: relative; border: 2px solid #334155; border-radius: 10px; overflow: hidden; background: #0f172a; box-shadow: inset 0 0 30px rgba(0,0,0,0.8);">
+        <canvas id="pubg-map-canvas" width="600" height="600" style="display: block; max-width: 80vw; max-height: 65vh;"></canvas>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; width: 100%; font-size: 12px; font-weight: 800; color: #cbd5e1;">
+        <div style="display: flex; gap: 16px;">
+          <span style="color: #facc15;">🟡 Sarı Ok: Senin Konumun</span>
+          <span style="color: #22c55e;">⚪ Beyaz Daire: Güvenli Alan</span>
+          <span style="color: #ef4444;">🔴 Kırmızı Daire: Bombardıman Alanı</span>
+        </div>
+        <div style="color: #94a3b8;">[M] veya [Esc] ile Haritayı Kapat</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PUBG IN-GAME INVENTORY & GROUND LOOT MODAL [TAB] -->
+  <div id="pubg-ingame-inventory-modal" class="custom-modal-overlay" style="display: none; z-index: 99998; backdrop-filter: blur(8px); background: rgba(5, 10, 20, 0.85); align-items: center; justify-content: center;">
+    <div style="background: rgba(15, 23, 42, 0.95); border: 2px solid rgba(56, 189, 248, 0.6); border-radius: 16px; padding: 22px; width: 920px; max-width: 95vw; max-height: 90vh; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 0 50px rgba(0,0,0,0.8); position: relative; overflow-y: auto;">
+      
+      <!-- Top Bar -->
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 12px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="font-size: 26px;">🎒</div>
+          <div>
+            <div style="font-size: 20px; font-weight: 900; color: #fff; letter-spacing: 0.5px;">PUBG ENVANTER & ÇANTA</div>
+            <div style="font-size: 12px; color: #94a3b8; font-weight: 700;">Can: <span id="pubg-inv-health-text" style="color: #22c55e;">150/150</span> | Sırt Çantası: <span id="pubg-inv-backpack-text" style="color: #38bdf8;">Seviye 1 Askeri Çanta</span></div>
+          </div>
+        </div>
+        <button onclick="togglePubgInGameInventory()" style="background: #ef4444; border: none; color: #fff; font-weight: 900; font-size: 14px; width: 34px; height: 34px; border-radius: 8px; cursor: pointer;">✖</button>
+      </div>
+
+      <!-- 3-Column Layout -->
+      <div style="display: grid; grid-template-columns: 1.1fr 1fr 1.1fr; gap: 18px; min-height: 420px;">
+        
+        <!-- Left: Nearby Ground Loot -->
+        <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="font-size: 13px; font-weight: 900; color: #facc15; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 6px;">
+            <span>📍</span> YERDEKİ EŞYALAR (ÇEVREDEKİLER)
+          </div>
+          <div id="inv-ground-loot-list" style="display: flex; flex-direction: column; gap: 8px; overflow-y: auto; max-height: 380px; padding-right: 4px;">
+            <div style="font-size: 12px; color: #94a3b8; text-align: center; margin-top: 40px;">Çevrede eşya yok.<br>(Evlerin içine girerek ganimet toplayın)</div>
+          </div>
+        </div>
+
+        <!-- Middle: Character & Equipped Gear -->
+        <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 12px;">
+          <div style="font-size: 13px; font-weight: 900; color: #38bdf8; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 6px;">
+            <span>🛡️</span> KUŞANILAN EKİPMANLAR
+          </div>
+          
+          <!-- Primary Gun -->
+          <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid #334155; border-radius: 8px; padding: 10px;">
+            <div style="font-size: 10px; color: #94a3b8; font-weight: 800; text-transform: uppercase;">1. BİRİNCİL SİLAH ([1])</div>
+            <div id="inv-slot1-title" style="font-size: 15px; font-weight: 900; color: #f8fafc; margin-top: 2px;">Boş</div>
+            <div id="inv-slot1-meta" style="font-size: 11px; color: #38bdf8; font-weight: 700; margin-top: 2px;">0 / 0 Mermi</div>
+          </div>
+
+          <!-- Secondary Gun -->
+          <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid #334155; border-radius: 8px; padding: 10px;">
+            <div style="font-size: 10px; color: #94a3b8; font-weight: 800; text-transform: uppercase;">2. İKİNCİL SİLAH ([2])</div>
+            <div id="inv-slot2-title" style="font-size: 15px; font-weight: 900; color: #f8fafc; margin-top: 2px;">Boş</div>
+            <div id="inv-slot2-meta" style="font-size: 11px; color: #38bdf8; font-weight: 700; margin-top: 2px;">0 / 0 Mermi</div>
+          </div>
+
+          <!-- Melee -->
+          <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid #334155; border-radius: 8px; padding: 8px 10px;">
+            <div style="font-size: 10px; color: #94a3b8; font-weight: 800; text-transform: uppercase;">3. YAKIN DÖVÜŞ ([3])</div>
+            <div style="font-size: 13px; font-weight: 800; color: #cbd5e1; margin-top: 2px;">🗡️ Askeri Komando Bıçağı</div>
+          </div>
+
+          <!-- Armor & Helmet Status -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid #334155; border-radius: 8px; padding: 8px;">
+              <div style="font-size: 10px; color: #94a3b8; font-weight: 800;">KASK</div>
+              <div id="inv-helmet-status" style="font-size: 11px; font-weight: 900; color: #94a3b8; margin-top: 2px;">Yok</div>
+            </div>
+            <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid #334155; border-radius: 8px; padding: 8px;">
+              <div style="font-size: 10px; color: #94a3b8; font-weight: 800;">YELEK</div>
+              <div id="inv-vest-status" style="font-size: 11px; font-weight: 900; color: #94a3b8; margin-top: 2px;">Yok</div>
+            </div>
+          </div>
+
+          <!-- Attachments Status -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid #334155; border-radius: 8px; padding: 8px;">
+              <div style="font-size: 10px; color: #94a3b8; font-weight: 800;">SUSTURUCU</div>
+              <div id="inv-silencer-status" style="font-size: 11px; font-weight: 900; color: #94a3b8; margin-top: 2px;">Yok</div>
+            </div>
+            <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid #334155; border-radius: 8px; padding: 8px;">
+              <div style="font-size: 10px; color: #94a3b8; font-weight: 800;">4x DÜRBÜN</div>
+              <div id="inv-scope-status" style="font-size: 11px; font-weight: 900; color: #94a3b8; margin-top: 2px;">Yok</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Backpack Items & Consumables -->
+        <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="font-size: 13px; font-weight: 900; color: #4ade80; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 6px;">
+            <span>💼</span> ÇANTA İÇİNDEKİLER
+          </div>
+          <div id="inv-backpack-items-list" style="display: flex; flex-direction: column; gap: 8px; overflow-y: auto; max-height: 380px;">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Bottom Hint -->
+      <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #334155; padding-top: 10px; font-size: 12px; font-weight: 800; color: #94a3b8;">
+        <div>İpucu: Yerdeki eşyalara veya çanta butonlarına tıklayarak doğrudan kullanabilirsiniz.</div>
+        <div style="color: #38bdf8;">[TAB] veya [Esc] ile Çantayı Kapat</div>
       </div>
 
     </div>
@@ -1494,9 +1608,10 @@
         <div>
           <div class="pubg-lobby-title">⚔️ MAÇ ÖNCESİ TAKIM & ODA LOBİSİ</div>
           <div class="pubg-lobby-badges">
-            <span class="pubg-badge-pill" id="pubg-lobby-room-code">ODA KODU: PUBG-8P</span>
+            <span class="pubg-badge-pill" id="pubg-lobby-room-code" onclick="copyPubgLobbyCode()" title="Tıkla ve Kodu Kopyala" style="cursor: pointer; background: rgba(14, 165, 233, 0.15); border-color: #0ea5e9; color: #38bdf8;">ODA KODU: PUBG-8P</span>
+            <button class="pubg-badge-pill" id="btn-copy-pubg-code" onclick="copyPubgLobbyCode()" style="cursor: pointer; background: rgba(59, 130, 246, 0.25); border-color: #3b82f6; color: #93c5fd; font-weight: 800; font-family: inherit;">📋 Kodu Kopyala</button>
             <span class="pubg-badge-pill" id="pubg-lobby-player-count">OYUNCULAR: 1 / 8</span>
-            <span class="pubg-badge-pill" id="pubg-lobby-map-name">HARİTA: 8000m Erangel</span>
+            <span class="pubg-badge-pill" id="pubg-lobby-map-name">HARİTA: PUBG Erangel</span>
           </div>
         </div>
         <!-- Mode Switcher: Herkes Tek vs Takımlı -->

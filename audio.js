@@ -4,6 +4,11 @@ class SoundFX {
     this.ctx = null;
     this.enabled = true;
     this.masterGain = null;
+    this.engineOsc1 = null;
+    this.engineOsc2 = null;
+    this.engineGain = null;
+    this.engineFilter = null;
+    this.isEngineRunning = false;
   }
 
   init() {
@@ -498,6 +503,242 @@ class SoundFX {
     g.connect(this.masterGain);
     osc.start(t);
     osc.stop(t + 0.04);
+  }
+
+  // Realistic Wooden Door Open/Close Creak & Latch
+  playDoor(isOpen = true) {
+    if (!this.enabled) return;
+    this.init();
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+
+    const clickOsc = this.ctx.createOscillator();
+    const clickGain = this.ctx.createGain();
+    clickOsc.type = 'triangle';
+    clickOsc.frequency.setValueAtTime(isOpen ? 480 : 320, t);
+    clickOsc.frequency.exponentialRampToValueAtTime(140, t + 0.05);
+    clickGain.gain.setValueAtTime(0.35, t);
+    clickGain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+    clickOsc.connect(clickGain);
+    clickGain.connect(this.masterGain);
+    clickOsc.start(t);
+    clickOsc.stop(t + 0.05);
+
+    const creakOsc = this.ctx.createOscillator();
+    const creakGain = this.ctx.createGain();
+    creakOsc.type = 'sawtooth';
+    creakOsc.frequency.setValueAtTime(isOpen ? 120 : 160, t + 0.03);
+    creakOsc.frequency.linearRampToValueAtTime(isOpen ? 180 : 90, t + 0.22);
+    creakGain.gain.setValueAtTime(0.18, t + 0.03);
+    creakGain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    creakOsc.connect(creakGain);
+    creakGain.connect(this.masterGain);
+    creakOsc.start(t + 0.03);
+    creakOsc.stop(t + 0.22);
+  }
+
+  // Natural Combat Boot Footsteps (Subtle, tactile, non-abrasive)
+  playFootstep(surface = 'grass') {
+    if (!this.enabled) return;
+    this.init();
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+
+    // Layer 1: Soft Low-End Body Thud (tactile heel/boot strike)
+    const thudOsc = this.ctx.createOscillator();
+    const thudGain = this.ctx.createGain();
+    thudOsc.type = 'sine';
+    const startPitch = surface === 'wood' ? 105 : (surface === 'water' ? 130 : 80);
+    const endPitch = surface === 'wood' ? 52 : (surface === 'water' ? 65 : 40);
+    thudOsc.frequency.setValueAtTime(startPitch, t);
+    thudOsc.frequency.exponentialRampToValueAtTime(endPitch, t + 0.05);
+    thudGain.gain.setValueAtTime(0.07, t);
+    thudGain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+    thudOsc.connect(thudGain);
+    thudGain.connect(this.masterGain);
+    thudOsc.start(t);
+    thudOsc.stop(t + 0.05);
+
+    // Layer 2: Subtle Lowpass Brush/Rustle (gentle tread friction, low gain)
+    const noiseSize = Math.floor(this.ctx.sampleRate * 0.045);
+    const noiseBuf = this.ctx.createBuffer(1, noiseSize, this.ctx.sampleRate);
+    const data = noiseBuf.getChannelData(0);
+    for (let i = 0; i < noiseSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (this.ctx.sampleRate * 0.01));
+    }
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = noiseBuf;
+
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = surface === 'wood' ? 'bandpass' : 'lowpass';
+    filter.frequency.setValueAtTime(surface === 'wood' ? 360 : 210, t);
+
+    const noiseGain = this.ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.05, t);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, t + 0.045);
+
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(this.masterGain);
+    noise.start(t);
+  }
+
+  // Realistic Procedural Vehicle Engine Sound (Car & Motorbike)
+  startEngineAudio(isBike = false) {
+    if (!this.enabled) return;
+    this.init();
+    if (!this.ctx || this.isEngineRunning) return;
+
+    try {
+      const t = this.ctx.currentTime;
+      this.engineGain = this.ctx.createGain();
+      this.engineGain.gain.setValueAtTime(0.01, t);
+      this.engineGain.gain.linearRampToValueAtTime(0.22, t + 0.25);
+
+      this.engineFilter = this.ctx.createBiquadFilter();
+      this.engineFilter.type = 'lowpass';
+      this.engineFilter.frequency.setValueAtTime(isBike ? 440 : 320, t);
+      this.engineFilter.Q.setValueAtTime(2.2, t);
+
+      // Low rumble combustion oscillator
+      this.engineOsc1 = this.ctx.createOscillator();
+      this.engineOsc1.type = isBike ? 'sawtooth' : 'triangle';
+      this.engineOsc1.frequency.setValueAtTime(isBike ? 85 : 55, t);
+
+      // Mechanical rev oscillator
+      this.engineOsc2 = this.ctx.createOscillator();
+      this.engineOsc2.type = 'sawtooth';
+      this.engineOsc2.frequency.setValueAtTime(isBike ? 170 : 110, t);
+
+      const osc2Gain = this.ctx.createGain();
+      osc2Gain.gain.setValueAtTime(0.42, t);
+      this.engineOsc2.connect(osc2Gain);
+      osc2Gain.connect(this.engineFilter);
+
+      this.engineOsc1.connect(this.engineFilter);
+      this.engineFilter.connect(this.engineGain);
+      this.engineGain.connect(this.masterGain);
+
+      this.engineOsc1.start(t);
+      this.engineOsc2.start(t);
+      this.isEngineRunning = true;
+    } catch (e) {
+      console.warn('Engine audio error:', e);
+    }
+  }
+
+  updateEngineAudio(speed = 0, isAccelerating = false, isBike = false) {
+    if (!this.isEngineRunning || !this.ctx || !this.engineOsc1) return;
+    const t = this.ctx.currentTime;
+    const absSpeed = Math.abs(speed);
+
+    // RPM pitch mapping
+    const baseFreq1 = isBike ? 80 : 50;
+    const maxFreq1 = isBike ? 340 : 230;
+    const targetFreq1 = baseFreq1 + (Math.min(100, absSpeed) / 100) * (maxFreq1 - baseFreq1) + (isAccelerating ? 25 : 0);
+    this.engineOsc1.frequency.setTargetAtTime(targetFreq1, t, 0.08);
+
+    if (this.engineOsc2) {
+      this.engineOsc2.frequency.setTargetAtTime(targetFreq1 * 2.05, t, 0.08);
+    }
+
+    if (this.engineFilter) {
+      const targetFilter = (isBike ? 380 : 280) + (absSpeed * 8) + (isAccelerating ? 240 : 0);
+      this.engineFilter.frequency.setTargetAtTime(Math.min(2200, targetFilter), t, 0.08);
+    }
+
+    if (this.engineGain) {
+      const targetGain = 0.15 + (Math.min(100, absSpeed) / 100) * 0.13 + (isAccelerating ? 0.07 : 0);
+      this.engineGain.gain.setTargetAtTime(targetGain, t, 0.08);
+    }
+  }
+
+  stopEngineAudio() {
+    if (!this.isEngineRunning || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    if (this.engineGain) {
+      try {
+        this.engineGain.gain.linearRampToValueAtTime(0.001, t + 0.12);
+      } catch (e) {}
+    }
+    setTimeout(() => {
+      try {
+        if (this.engineOsc1) { this.engineOsc1.stop(); this.engineOsc1.disconnect(); this.engineOsc1 = null; }
+        if (this.engineOsc2) { this.engineOsc2.stop(); this.engineOsc2.disconnect(); this.engineOsc2 = null; }
+        if (this.engineFilter) { this.engineFilter.disconnect(); this.engineFilter = null; }
+        if (this.engineGain) { this.engineGain.disconnect(); this.engineGain = null; }
+      } catch (e) {}
+      this.isEngineRunning = false;
+    }, 150);
+  }
+
+  // Sci-Fi Hologram Revive Beacon Signal & Horn
+  playReviveBeacon() {
+    if (!this.enabled) return;
+    this.init();
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(220, t);
+    osc.frequency.exponentialRampToValueAtTime(880, t + 0.6);
+    g.gain.setValueAtTime(0.4, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+    osc.connect(g);
+    g.connect(this.masterGain);
+    osc.start(t);
+    osc.stop(t + 0.7);
+  }
+
+  // Water Splash / Sloshing Sound
+  playWaterSplash() {
+    if (!this.enabled) return;
+    this.init();
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+
+    const size = Math.floor(this.ctx.sampleRate * 0.2);
+    const buf = this.ctx.createBuffer(1, size, this.ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < size; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (this.ctx.sampleRate * 0.04));
+    }
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = buf;
+
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(600, t);
+
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.35, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.masterGain);
+    noise.start(t);
+  }
+
+  // Crisp Optic / Scope Click
+  playScopeZoom() {
+    if (!this.enabled) return;
+    this.init();
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(950, t);
+    osc.frequency.exponentialRampToValueAtTime(450, t + 0.035);
+    g.gain.setValueAtTime(0.3, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.035);
+    osc.connect(g);
+    g.connect(this.masterGain);
+    osc.start(t);
+    osc.stop(t + 0.035);
   }
 }
 

@@ -1247,6 +1247,7 @@ wss.on('connection', (ws) => {
           broadcastToRoom(currentRoomId, {
             type: 'team_switched',
             playerId: playerId,
+            id: playerId,
             team: data.team,
             players: Array.from(room.players.values())
           });
@@ -1263,7 +1264,8 @@ wss.on('connection', (ws) => {
             mode: data.mode || room.mode || 'TDM',
             map: data.map || room.map || 'pubg',
             teams: data.teams,
-            bots: data.bots
+            bots: data.bots,
+            botsFilled: !!data.botsFilled
           });
         }
       }
@@ -1294,6 +1296,14 @@ wss.on('connection', (ws) => {
       }
 
       if (data.type === 'player_hit') {
+        const room = rooms.get(currentRoomId);
+        if (room) {
+          const attacker = room.players.get(playerId);
+          const target = room.players.get(data.targetId);
+          if (attacker && target && attacker.team && target.team && attacker.team === target.team) {
+            return; // Friendly fire disabled: teammates cannot shoot each other!
+          }
+        }
         const attackerName = ws.username || playerData.name || 'Oyuncu';
         broadcastToRoom(currentRoomId, {
           type: 'player_damaged',
@@ -1332,6 +1342,28 @@ wss.on('connection', (ws) => {
         }, ws);
       }
 
+      if (data.type === 'revive_player') {
+        const room = rooms.get(currentRoomId);
+        if (room) {
+          const target = room.players.get(data.targetId);
+          if (target) {
+            target.isDead = false;
+            target.health = 150;
+            target.x = data.x;
+            target.y = data.y;
+            target.z = data.z;
+          }
+        }
+        broadcastToRoom(currentRoomId, {
+          type: 'player_respawned',
+          id: data.targetId,
+          x: data.x,
+          y: data.y,
+          z: data.z,
+          revivedBy: playerId
+        });
+      }
+
       if (data.type === 'vehicle_update') {
         broadcastToRoom(currentRoomId, {
           type: 'vehicle_update',
@@ -1358,6 +1390,21 @@ wss.on('connection', (ws) => {
           lootIndex: data.lootIndex,
           pickerId: playerId
         }, ws);
+      }
+
+      if (data.type === 'chat_message') {
+        const senderName = ws.username || playerData.name || 'Oyuncu';
+        const rawText = String(data.message || '').trim().slice(0, 150);
+        if (rawText.length > 0) {
+          broadcastToRoom(currentRoomId, {
+            type: 'chat_message',
+            senderId: playerId,
+            sender: senderName,
+            team: playerData.team || data.team || 'blue',
+            message: rawText,
+            timestamp: Date.now()
+          });
+        }
       }
 
     } catch (err) {}

@@ -518,15 +518,15 @@ function createFaceTexture() {
 }
 
 // Generate Player Overhead Nameplate Canvas Texture
-function createNameplateTexture(name, level = 5, team = 'blue') {
+function createNameplateTexture(name, level = 5, isFriendlyOrTeam = true) {
   const canvas = document.createElement('canvas');
   canvas.width = 440; canvas.height = 96;
   const ctx = canvas.getContext('2d');
 
-  const isFriendly = (team === 'blue');
+  const isFriendly = (isFriendlyOrTeam === true || isFriendlyOrTeam === 'blue' || isFriendlyOrTeam === 'teammate' || isFriendlyOrTeam === 'friendly');
 
   // Background Badge Card
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
   ctx.roundRect(8, 8, 424, 80, 16);
   ctx.fill();
 
@@ -547,23 +547,25 @@ function createNameplateTexture(name, level = 5, team = 'blue') {
 
   // Player Name
   ctx.fillStyle = isFriendly ? '#38bdf8' : '#ffffff';
-  ctx.font = 'bold 24px sans-serif';
+  ctx.font = 'bold 22px sans-serif';
   ctx.textAlign = 'left';
-  ctx.fillText(name.length > 14 ? name.substring(0, 14) + '..' : name, 82, 48);
+  ctx.fillText(name.length > 11 ? name.substring(0, 11) + '..' : name, 82, 48);
 
   // Team Pill Badge on Right
-  ctx.fillStyle = isFriendly ? '#22c55e' : '#ef4444';
-  ctx.roundRect(310, 26, 112, 44, 8);
+  ctx.fillStyle = isFriendly ? '#059669' : '#dc2626';
+  ctx.roundRect(268, 24, 154, 48, 10);
   ctx.fill();
 
   ctx.fillStyle = '#ffffff';
-  ctx.font = '900 16px sans-serif';
+  ctx.font = '900 15px sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(isFriendly ? '🛡️ TAKIM' : '🎯 DÜŞMAN', 366, 48);
+  ctx.fillText(isFriendly ? '🛡️ TAKIM' : '🎯 DÜŞMAN', 345, 48);
 
   const tex = new THREE.CanvasTexture(canvas);
   return tex;
 }
+window.createNameplateTexture = createNameplateTexture;
+
 
 // Global Textures
 const akWoodTex = createAKWoodTexture();
@@ -1688,6 +1690,77 @@ function createFragGrenadeModel(isViewmodel = false) {
   return root;
 }
 
+// 5B. M18 SMOKE GRENADE MODEL (CANISTER)
+function createSmokeGrenadeModel(isViewmodel = false) {
+  const root = new THREE.Group();
+
+  const canBodyMat = new THREE.MeshStandardMaterial({
+    color: 0x64748b, // Matte slate/steel canister body
+    roughness: 0.45,
+    metalness: 0.35
+  });
+
+  const stripeMat = new THREE.MeshStandardMaterial({
+    color: 0x38bdf8, // Vibrant cyan smoke identifier band
+    roughness: 0.4,
+    metalness: 0.1
+  });
+
+  const fuseMat = new THREE.MeshStandardMaterial({
+    color: 0x475569, // Zinc fuse cap
+    metalness: 0.8,
+    roughness: 0.3
+  });
+
+  const pinMat = new THREE.MeshStandardMaterial({
+    color: 0xfacc15, // Brass safety pin ring
+    metalness: 0.9,
+    roughness: 0.2
+  });
+
+  // Main Canister Cylinder
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.38, 16), canBodyMat);
+
+  // Colored identification band around waist
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.112, 0.112, 0.09, 16), stripeMat);
+  band.position.y = 0.02;
+
+  // Fuse Top & Neck
+  const fuseNeck = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.10, 12), fuseMat);
+  fuseNeck.position.y = 0.24;
+
+  // Safety Lever / Spoon
+  const spoon = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.28, 0.015), fuseMat);
+  spoon.position.set(0, 0.14, 0.11);
+  spoon.rotation.x = -0.15;
+
+  // Brass Pull Ring Pin
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.012, 8, 16), pinMat);
+  ring.position.set(0.07, 0.25, 0.02);
+  ring.rotation.y = Math.PI / 2;
+
+  root.add(body, band, fuseNeck, spoon, ring);
+
+  if (isViewmodel) {
+    const sleeveMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.6 });
+    const gloveMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 });
+
+    const rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.24, 0.72), sleeveMat);
+    rightArm.position.set(0.22, -0.22, 0.3);
+    rightArm.rotation.set(0.35, -0.2, 0.1);
+
+    const rightHand = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.22), gloveMat);
+    rightHand.position.set(0.01, -0.06, 0.04);
+
+    root.add(rightArm, rightHand);
+    root.scale.set(0.85, 0.85, 0.85);
+  } else {
+    root.scale.set(0.55, 0.55, 0.55);
+  }
+
+  return root;
+}
+
 // 6. PAINTBALL GUN MODEL (PRIMARY OPTION)
 function createPaintballGunModel(isViewmodel = false) {
   const root = new THREE.Group();
@@ -1954,8 +2027,9 @@ function createBlockyCharacter(options = {}) {
     const hpGroup = new THREE.Group();
     hpGroup.position.set(0, 2.9, 0);
 
+    const isFriendly = (options.isEnemy === false) || (options.isTeammate === true) || (options.teamColor === 'blue' && options.isEnemy !== true);
     // Nickname Canvas Plane
-    const nameTex = createNameplateTexture(options.name, options.level || 5, options.teamColor || 'blue');
+    const nameTex = createNameplateTexture(options.name, options.level || 5, isFriendly);
     const nameMat = new THREE.MeshBasicMaterial({ map: nameTex, transparent: true, side: THREE.DoubleSide });
     nameplateSprite = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.45), nameMat);
     nameplateSprite.position.y = 0.38;
@@ -1972,7 +2046,7 @@ function createBlockyCharacter(options = {}) {
     fillGeom.translate(0.68, 0, 0);
     hpFill = new THREE.Mesh(
       fillGeom,
-      new THREE.MeshBasicMaterial({ color: options.teamColor === 'blue' ? 0x00f0ff : 0xef4444 })
+      new THREE.MeshBasicMaterial({ color: isFriendly ? 0x00f0ff : 0xef4444 })
     );
     hpFill.position.x = -0.68;
     hpGroup.add(hpFill);
@@ -1990,6 +2064,8 @@ function createBlockyCharacter(options = {}) {
     rightLeg: rightLeg,
     heldWeapon: heldWeapon,
     hpFill: hpFill,
+    hpFillMat: hpFill ? hpFill.material : null,
+    shirtMat: shirtMat,
     nameplateSprite: nameplateSprite
   };
 }
@@ -3479,6 +3555,8 @@ function createPubgJeepVehicle(startX = 0, startZ = 0, startAngle = 0) {
 
   return {
     group: jeepGroup,
+    type: 'jeep',
+    name: 'PUBG Askeri UAZ 4x4',
     wheels: {
       flPivot: flPivot,
       frPivot: frPivot,
@@ -3493,12 +3571,287 @@ function createPubgJeepVehicle(startX = 0, startZ = 0, startAngle = 0) {
     angle: startAngle,
     steerAngle: 0,
     isDriven: false,
-    maxSpeed: 82,
-    reverseMax: -26,
-    accel: 38,
-    brakeDecel: 52,
+    maxSpeed: 96,
+    reverseMax: -28,
+    accel: 58,
+    brakeDecel: 70,
     friction: 0.985,
-    turnSpeed: 2.3
+    turnSpeed: 3.0,
+    cockpitPos: new THREE.Vector3(-0.75, 2.45, 0.35)
+  };
+}
+
+// Iconic Turkish/PUBG Beyaz Toros Station Wagon 3D Model
+function createPubgTorosVehicle(startX = 0, startZ = 0, startAngle = 0) {
+  const torosGroup = new THREE.Group();
+
+  const whiteBodyMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.35, metalness: 0.1 });
+  const darkTrimMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.7, metalness: 0.3 });
+  const chromeMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.15, metalness: 0.9 });
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x93c5fd, transparent: true, opacity: 0.45, roughness: 0.1, metalness: 0.8 });
+  const tireMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.9, metalness: 0.1 });
+  const hubcapMat = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.25, metalness: 0.85 });
+  const lightGlowMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+  const tailGlowMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+
+  // 1. Lower Chassis
+  const chassis = new THREE.Mesh(new THREE.BoxGeometry(3.3, 0.5, 6.4), darkTrimMat);
+  chassis.position.y = 0.65;
+  torosGroup.add(chassis);
+
+  // 2. Main White Body
+  const body = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.8, 6.2), whiteBodyMat);
+  body.position.y = 1.15;
+  body.castShadow = true;
+  torosGroup.add(body);
+
+  // 3. Sloped Hood (Classic Toros Front)
+  const hood = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.45, 2.2), whiteBodyMat);
+  hood.position.set(0, 1.45, -1.9);
+  hood.rotation.x = 0.05;
+  torosGroup.add(hood);
+
+  // 4. Black Front Grille & Chrome Bumper
+  const grille = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.45, 0.12), darkTrimMat);
+  grille.position.set(0, 1.45, -3.02);
+  const frontBumper = new THREE.Mesh(new THREE.BoxGeometry(3.3, 0.32, 0.25), chromeMat);
+  frontBumper.position.set(0, 0.75, -3.15);
+  torosGroup.add(grille, frontBumper);
+
+  // Rectangular Headlights
+  const hlLeft = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.32, 0.1), lightGlowMat);
+  hlLeft.position.set(-1.05, 1.45, -3.05);
+  const hlRight = hlLeft.clone();
+  hlRight.position.x = 1.05;
+  torosGroup.add(hlLeft, hlRight);
+
+  // 5. Cabin & Station Wagon Roof
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(2.9, 0.95, 3.8), whiteBodyMat);
+  cabin.position.set(0, 1.95, 0.8);
+  torosGroup.add(cabin);
+
+  // Windshield & Rear Window
+  const windshield = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.85, 0.08), glassMat);
+  windshield.position.set(0, 1.85, -0.95);
+  windshield.rotation.x = 0.35;
+  const rearWindow = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.75, 0.08), glassMat);
+  rearWindow.position.set(0, 1.85, 2.7);
+  torosGroup.add(windshield, rearWindow);
+
+  // Side Windows
+  const sideWinL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.65, 3.4), glassMat);
+  sideWinL.position.set(-1.46, 1.95, 0.85);
+  const sideWinR = sideWinL.clone();
+  sideWinR.position.x = 1.46;
+  torosGroup.add(sideWinL, sideWinR);
+
+  // 6. Iconic Toros Roof Rack (Portbagaj) with Crossbars & Spare Wheel
+  const rackBar1 = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.08, 0.08), chromeMat);
+  rackBar1.position.set(0, 2.52, -0.2);
+  const rackBar2 = rackBar1.clone();
+  rackBar2.position.z = 0.8;
+  const rackBar3 = rackBar1.clone();
+  rackBar3.position.z = 1.8;
+  const railL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 2.6), chromeMat);
+  railL.position.set(-1.2, 2.52, 0.8);
+  const railR = railL.clone();
+  railR.position.x = 1.2;
+  torosGroup.add(rackBar1, rackBar2, rackBar3, railL, railR);
+
+  // Spare wheel on roof rack!
+  const roofTire = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.35, 16), tireMat);
+  roofTire.position.set(0, 2.72, 0.8);
+  torosGroup.add(roofTire);
+
+  // 7. Rear Chrome Bumper & Taillights
+  const rearBumper = new THREE.Mesh(new THREE.BoxGeometry(3.3, 0.32, 0.25), chromeMat);
+  rearBumper.position.set(0, 0.75, 3.15);
+  const tlL = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.55, 0.08), tailGlowMat);
+  tlL.position.set(-1.25, 1.25, 3.12);
+  const tlR = tlL.clone();
+  tlR.position.x = 1.25;
+  torosGroup.add(rearBumper, tlL, tlR);
+
+  // Cabin Interior
+  const seatMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.9 });
+  const seatDriver = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.9, 0.85), seatMat);
+  seatDriver.position.set(-0.65, 1.45, 0.1);
+  const seatPass = seatDriver.clone();
+  seatPass.position.x = 0.65;
+  const steerWheel = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.038, 8, 16), darkTrimMat);
+  steerWheel.position.set(-0.65, 1.85, -0.45);
+  steerWheel.rotation.x = 0.55;
+  torosGroup.add(seatDriver, seatPass, steerWheel);
+
+  // 8. 4 Wheels with Toros Classic Chrome Hubcaps
+  function createTorosWheel() {
+    const wG = new THREE.Group();
+    const tire = new THREE.Mesh(new THREE.CylinderGeometry(0.68, 0.68, 0.48, 18), tireMat);
+    tire.rotation.z = Math.PI / 2;
+    tire.castShadow = true;
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.52, 14), hubcapMat);
+    hub.rotation.z = Math.PI / 2;
+    wG.add(tire, hub);
+    return { group: wG, tire: tire };
+  }
+
+  const flPivot = new THREE.Group();
+  flPivot.position.set(-1.65, 0.68, -1.8);
+  const flW = createTorosWheel();
+  flPivot.add(flW.group);
+  torosGroup.add(flPivot);
+
+  const frPivot = new THREE.Group();
+  frPivot.position.set(1.65, 0.68, -1.8);
+  const frW = createTorosWheel();
+  frPivot.add(frW.group);
+  torosGroup.add(frPivot);
+
+  const rlW = createTorosWheel();
+  rlW.group.position.set(-1.65, 0.68, 1.8);
+  const rrW = createTorosWheel();
+  rrW.group.position.set(1.65, 0.68, 1.8);
+  torosGroup.add(rlW.group, rrW.group);
+
+  torosGroup.position.set(startX, 0, startZ);
+  torosGroup.rotation.y = startAngle;
+
+  return {
+    group: torosGroup,
+    type: 'toros',
+    name: 'Beyaz Toros Station Wagon',
+    wheels: {
+      flPivot: flPivot,
+      frPivot: frPivot,
+      flTire: flW.tire,
+      frTire: frW.tire,
+      rlTire: rlW.tire,
+      rrTire: rrW.tire
+    },
+    pos: new THREE.Vector3(startX, 0, startZ),
+    vel: new THREE.Vector3(0, 0, 0),
+    speed: 0,
+    angle: startAngle,
+    steerAngle: 0,
+    isDriven: false,
+    maxSpeed: 108,
+    reverseMax: -32,
+    accel: 64,
+    brakeDecel: 78,
+    friction: 0.985,
+    turnSpeed: 3.2,
+    cockpitPos: new THREE.Vector3(-0.65, 2.15, 0.2)
+  };
+}
+
+// Swift PUBG Military Two-Wheeler Motorbike 3D Model
+function createPubgMotorbikeVehicle(startX = 0, startZ = 0, startAngle = 0) {
+  const bikeGroup = new THREE.Group();
+
+  const tankMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.25, metalness: 0.6 });
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.5, metalness: 0.85 });
+  const chromeMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.1, metalness: 0.95 });
+  const seatMat = new THREE.MeshStandardMaterial({ color: 0x27272a, roughness: 0.9 });
+  const tireMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.9, metalness: 0.1 });
+  const rimMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.3, metalness: 0.75 });
+  const lightGlowMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+  const tailGlowMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+
+  // 1. Tubular Steel Frame & Engine Block
+  const engine = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.85, 1.4), frameMat);
+  engine.position.set(0, 0.95, -0.1);
+  const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.48, 1.35, 14), tankMat);
+  tank.rotation.x = Math.PI / 2;
+  tank.position.set(0, 1.5, -0.4);
+  bikeGroup.add(engine, tank);
+
+  // 2. Stepped Dual Leather Seat
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.35, 1.6), seatMat);
+  seat.position.set(0, 1.45, 0.7);
+  bikeGroup.add(seat);
+
+  // 3. Chrome Exhaust Pipe (Running on right side)
+  const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 2.4, 12), chromeMat);
+  exhaust.rotation.x = Math.PI / 2;
+  exhaust.position.set(0.48, 0.65, 0.5);
+  bikeGroup.add(exhaust);
+
+  // 4. Front Steerable Fork & Handlebars
+  const frontFork = new THREE.Group();
+  frontFork.position.set(0, 0.75, -1.55);
+
+  const forkL = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.5, 8), chromeMat);
+  forkL.position.set(-0.25, 0.45, 0);
+  forkL.rotation.x = 0.25;
+  const forkR = forkL.clone();
+  forkR.position.x = 0.25;
+
+  const handleBar = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.08, 0.08), frameMat);
+  handleBar.position.set(0, 1.15, -0.15);
+
+  // Round Headlight
+  const headlight = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.15, 16), lightGlowMat);
+  headlight.rotation.x = Math.PI / 2;
+  headlight.position.set(0, 0.95, -0.32);
+
+  frontFork.add(forkL, forkR, handleBar, headlight);
+
+  // Front Motorcycle Wheel
+  const fwTire = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 0.28, 20), tireMat);
+  fwTire.rotation.z = Math.PI / 2;
+  fwTire.castShadow = true;
+  const fwRim = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.3, 14), rimMat);
+  fwRim.rotation.z = Math.PI / 2;
+  const frontWheelGroup = new THREE.Group();
+  frontWheelGroup.add(fwTire, fwRim);
+  frontFork.add(frontWheelGroup);
+  bikeGroup.add(frontFork);
+
+  // 5. Rear Motorcycle Wheel
+  const rwTire = new THREE.Mesh(new THREE.CylinderGeometry(0.78, 0.78, 0.38, 20), tireMat);
+  rwTire.rotation.z = Math.PI / 2;
+  rwTire.castShadow = true;
+  const rwRim = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.4, 14), rimMat);
+  rwRim.rotation.z = Math.PI / 2;
+  const rearWheelGroup = new THREE.Group();
+  rearWheelGroup.position.set(0, 0.75, 1.55);
+  rearWheelGroup.add(rwTire, rwRim);
+  bikeGroup.add(rearWheelGroup);
+
+  // 6. Rear Fender & Tail Light
+  const tailLight = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.18, 0.1), tailGlowMat);
+  tailLight.position.set(0, 1.45, 1.55);
+  bikeGroup.add(tailLight);
+
+  bikeGroup.position.set(startX, 0, startZ);
+  bikeGroup.rotation.y = startAngle;
+
+  return {
+    group: bikeGroup,
+    type: 'motorbike',
+    name: 'PUBG Askeri Motor',
+    isBike: true,
+    wheels: {
+      flPivot: frontFork,
+      frPivot: frontFork,
+      flTire: fwTire,
+      frTire: fwTire,
+      rlTire: rwTire,
+      rrTire: rwTire
+    },
+    pos: new THREE.Vector3(startX, 0, startZ),
+    vel: new THREE.Vector3(0, 0, 0),
+    speed: 0,
+    angle: startAngle,
+    steerAngle: 0,
+    isDriven: false,
+    maxSpeed: 128,
+    reverseMax: -22,
+    accel: 88,
+    brakeDecel: 90,
+    friction: 0.988,
+    turnSpeed: 3.8,
+    cockpitPos: new THREE.Vector3(0, 2.35, 0.25)
   };
 }
 
@@ -3648,6 +4001,7 @@ function createPubgSurvivalMap() {
   const colliders = [];
   const lootItems = [];
   const spawnPoints = [];
+  const housePositions = [];
 
   // Materials
   const floorWoodMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.7 });
@@ -3701,29 +4055,160 @@ function createPubgSurvivalMap() {
   oceanMesh.position.set(0, -0.2, 0);
   mapGroup.add(oceanMesh);
 
-  // 2. MAIN ASPHALT HIGHWAY (Z: -1250 to +1250, Width: 16m)
-  pubgRoadTex.repeat.set(1, 100);
-  const highwayMesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(16, 2500),
-    new THREE.MeshStandardMaterial({ map: pubgRoadTex, roughness: 0.6, metalness: 0.1 })
-  );
-  highwayMesh.rotation.x = -Math.PI / 2;
-  highwayMesh.position.set(0, 0.04, 0);
-  highwayMesh.receiveShadow = true;
-  mapGroup.add(highwayMesh);
+  // 2. ORGANIC WINDING ERANGEL ROAD NETWORK & SECONDARY TRAILS (SEAMLESS CONTINUOUS RIBBONS)
+  const addContinuousRoadRibbon = (points, width, mat, yOffset = 0.12) => {
+    if (!points || points.length < 2) return;
+    const geom = new THREE.BufferGeometry();
+    const vertices = [];
+    const uvs = [];
+    const indices = [];
 
-  // East-West Cross Avenues
-  const addCrossRoad = (zPos, width = 14, length = 1000, xOffset = 0) => {
-    const cr = new THREE.Mesh(new THREE.PlaneGeometry(width, length), dirtRoadMat);
-    cr.rotation.x = -Math.PI / 2;
-    cr.rotation.z = Math.PI / 2;
-    cr.position.set(xOffset, 0.05, zPos);
-    mapGroup.add(cr);
+    let totalDist = 0;
+    const distances = [0];
+    for (let i = 1; i < points.length; i++) {
+      const segD = Math.hypot(points[i].x - points[i - 1].x, points[i].z - points[i - 1].z);
+      totalDist += segD;
+      distances.push(totalDist);
+    }
+
+    const halfW = width * 0.5;
+
+    for (let i = 0; i < points.length; i++) {
+      let nx = 0, nz = 0;
+      if (i === 0) {
+        const dx = points[1].x - points[0].x;
+        const dz = points[1].z - points[0].z;
+        const len = Math.hypot(dx, dz) || 1;
+        nx = -dz / len;
+        nz = dx / len;
+      } else if (i === points.length - 1) {
+        const dx = points[i].x - points[i - 1].x;
+        const dz = points[i].z - points[i - 1].z;
+        const len = Math.hypot(dx, dz) || 1;
+        nx = -dz / len;
+        nz = dx / len;
+      } else {
+        const dx1 = points[i].x - points[i - 1].x;
+        const dz1 = points[i].z - points[i - 1].z;
+        const l1 = Math.hypot(dx1, dz1) || 1;
+        const dx2 = points[i + 1].x - points[i].x;
+        const dz2 = points[i + 1].z - points[i].z;
+        const l2 = Math.hypot(dx2, dz2) || 1;
+        const avgDx = (dx1 / l1 + dx2 / l2);
+        const avgDz = (dz1 / l1 + dz2 / l2);
+        const avgLen = Math.hypot(avgDx, avgDz) || 1;
+        nx = -avgDz / avgLen;
+        nz = avgDx / avgLen;
+      }
+
+      // Left & Right vertices along road perpendicular
+      vertices.push(points[i].x + nx * halfW, yOffset, points[i].z + nz * halfW);
+      vertices.push(points[i].x - nx * halfW, yOffset, points[i].z - nz * halfW);
+
+      const vCoord = distances[i] / 12.0;
+      uvs.push(0, vCoord);
+      uvs.push(1, vCoord);
+
+      // Upward pointing (+Y) triangle normal winding order
+      if (i < points.length - 1) {
+        const v0 = i * 2;
+        const v1 = i * 2 + 1;
+        const v2 = (i + 1) * 2;
+        const v3 = (i + 1) * 2 + 1;
+        indices.push(v0, v2, v1);
+        indices.push(v2, v3, v1);
+      }
+    }
+
+    geom.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    geom.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geom.setIndex(indices);
+    geom.computeVertexNormals();
+
+    const mesh = new THREE.Mesh(geom, mat);
+    mesh.receiveShadow = true;
+    mapGroup.add(mesh);
   };
-  addCrossRoad(820, 14, 1100, 50);    // Rozhok Avenue
-  addCrossRoad(420, 14, 900, 150);    // School Avenue
-  addCrossRoad(-120, 16, 1200, -80);  // Pochinki Boulevard
-  addCrossRoad(-600, 14, 800, 100);   // Farm Road
+
+  pubgRoadTex.repeat.set(1, 1);
+  const asphaltRoadMat = new THREE.MeshStandardMaterial({
+    map: pubgRoadTex,
+    roughness: 0.7,
+    metalness: 0.08,
+    side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2
+  });
+  dirtRoadMat.side = THREE.DoubleSide;
+  dirtRoadMat.polygonOffset = true;
+  dirtRoadMat.polygonOffsetFactor = -2;
+  dirtRoadMat.polygonOffsetUnits = -2;
+
+  // Main S-Curved Erangel Highway (Winding through Farm, Pochinki, River Bridge, School, and Rozhok)
+  const mainHighwayPoints = [
+    { x: 50, z: -1250 },
+    { x: 65, z: -1080 },
+    { x: 35, z: -880 },
+    { x: -20, z: -680 },
+    { x: -55, z: -480 },
+    { x: -90, z: -280 },
+    { x: -60, z: -110 },
+    { x: -20, z: 20 },
+    { x: 0, z: 110 },   // Approaching River Bridge
+    { x: 0, z: 190 },   // Across River Bridge (aligned straight with bridge structure)
+    { x: 25, z: 280 },
+    { x: 75, z: 380 },  // Skirting PUBG School
+    { x: 110, z: 510 },
+    { x: 80, z: 660 },
+    { x: 25, z: 780 },  // Approaching Rozhok Ridge
+    { x: -15, z: 920 },
+    { x: 20, z: 1080 },
+    { x: 40, z: 1250 }
+  ];
+  addContinuousRoadRibbon(mainHighwayPoints, 15, asphaltRoadMat, 0.12);
+
+  // Pochinki Loop & Southern Farmland Road
+  const pochinkiRoadPoints = [
+    { x: -350, z: -20 },
+    { x: -290, z: -60 },
+    { x: -150, z: -70 },
+    { x: -60, z: -110 },
+    { x: 60, z: -220 },
+    { x: 140, z: -400 },
+    { x: 160, z: -600 }
+  ];
+  addContinuousRoadRibbon(pochinkiRoadPoints, 12, dirtRoadMat, 0.14);
+
+  // Pochinki North Avenue to West Coast
+  const pochinkiNorthPoints = [
+    { x: -350, z: 40 },
+    { x: -220, z: 50 },
+    { x: -115, z: 45 },
+    { x: -20, z: 20 }
+  ];
+  addContinuousRoadRibbon(pochinkiNorthPoints, 11, dirtRoadMat, 0.14);
+
+  // Rozhok - School Ridge Connector Road
+  const rozhokSchoolPoints = [
+    { x: 75, z: 380 },
+    { x: 280, z: 420 },
+    { x: 350, z: 460 },  // School entrance
+    { x: 420, z: 580 },
+    { x: 300, z: 720 },
+    { x: 160, z: 780 },
+    { x: 25, z: 780 }
+  ];
+  addContinuousRoadRibbon(rozhokSchoolPoints, 12, asphaltRoadMat, 0.12);
+
+  // North Rozhok - Yasnaya Country Trail
+  const yasnayaTrailPoints = [
+    { x: 160, z: 780 },
+    { x: 240, z: 820 },
+    { x: 320, z: 840 },
+    { x: 450, z: 920 }
+  ];
+  addContinuousRoadRibbon(yasnayaTrailPoints, 10, dirtRoadMat, 0.14);
 
   // 3. RIVER & SUSPENSION HIGHWAY BRIDGE (Z: 110 to 190)
   const riverMesh = new THREE.Mesh(new THREE.PlaneGeometry(800, 80), waterMat);
@@ -3731,55 +4216,129 @@ function createPubgSurvivalMap() {
   riverMesh.position.set(0, 0.02, 150);
   mapGroup.add(riverMesh);
 
-  // Steel Truss Bridge
-  addBoxObject(18, 1.2, 90, 0, 1.2, 150, concreteMat);
-  addBoxObject(1.4, 24, 1.4, -9.5, 1.2, 120, metalBridgeMat);
-  addBoxObject(1.4, 24, 1.4, 9.5, 1.2, 120, metalBridgeMat);
-  addBoxObject(1.4, 24, 1.4, -9.5, 1.2, 180, metalBridgeMat);
-  addBoxObject(1.4, 24, 1.4, 9.5, 1.2, 180, metalBridgeMat);
+  // Steel Truss Bridge with Smooth Approach Ramps (North & South River Banks)
+  // 1. Smooth North Approach Ramp (z: 92 to 105, from y: 0.05 to 1.1)
+  const rampNorth = new THREE.Mesh(new THREE.BoxGeometry(18, 0.5, 14), concreteMat);
+  rampNorth.position.set(0, 0.45, 98.5);
+  rampNorth.rotation.x = Math.atan2(0.9, 14);
+  rampNorth.receiveShadow = true;
+  mapGroup.add(rampNorth);
+  colliders.push({
+    isStairs: true,
+    minX: -9.5, maxX: 9.5,
+    minZ: 92, maxZ: 105,
+    minY: 0.05, maxY: 1.15,
+    dirZ: 1
+  });
+
+  // 2. Main Bridge Elevated Deck (z: 105 to 195, y: 0.9 to 1.1)
+  const bridgeDeck = new THREE.Mesh(new THREE.BoxGeometry(18, 0.5, 90), concreteMat);
+  bridgeDeck.position.set(0, 0.9, 150);
+  bridgeDeck.receiveShadow = true;
+  mapGroup.add(bridgeDeck);
+  colliders.push({
+    isFloor: true,
+    minX: -9.5, maxX: 9.5,
+    minZ: 105, maxZ: 195,
+    minY: 0.65, maxY: 1.15
+  });
+
+  // 3. Smooth South Approach Ramp (z: 195 to 208, from y: 1.1 down to 0.05)
+  const rampSouth = new THREE.Mesh(new THREE.BoxGeometry(18, 0.5, 14), concreteMat);
+  rampSouth.position.set(0, 0.45, 201.5);
+  rampSouth.rotation.x = -Math.atan2(0.9, 14);
+  rampSouth.receiveShadow = true;
+  mapGroup.add(rampSouth);
+  colliders.push({
+    isStairs: true,
+    minX: -9.5, maxX: 9.5,
+    minZ: 195, maxZ: 208,
+    minY: 0.05, maxY: 1.15,
+    dirZ: -1
+  });
+
+  // Bridge Guard Rails & Overhead Steel Truss Towers
+  addBoxObject(1.4, 24, 1.4, -9.5, 1.1, 120, metalBridgeMat);
+  addBoxObject(1.4, 24, 1.4, 9.5, 1.1, 120, metalBridgeMat);
+  addBoxObject(1.4, 24, 1.4, -9.5, 1.1, 180, metalBridgeMat);
+  addBoxObject(1.4, 24, 1.4, 9.5, 1.1, 180, metalBridgeMat);
   addBoxObject(20.4, 1.4, 1.4, 0, 24, 120, metalBridgeMat);
   addBoxObject(20.4, 1.4, 1.4, 0, 24, 180, metalBridgeMat);
-  addBoxObject(0.8, 1.4, 90, -9.5, 1.8, 150, metalBridgeMat);
-  addBoxObject(0.8, 1.4, 90, 9.5, 1.8, 150, metalBridgeMat);
+  addBoxObject(0.8, 1.4, 90, -9.5, 1.3, 150, metalBridgeMat);
+  addBoxObject(0.8, 1.4, 90, 9.5, 1.3, 150, metalBridgeMat);
 
-  // 4. ENTERABLE HOUSE GENERATOR (100% OPEN DOORWAYS & CLIMBABLE STAIRS)
-  const addEnterableHouse = (cx, cz, rotY = 0) => {
+  // DIVERSE HOUSE ARCHITECTURAL MATERIALS (4 DISTINCT VISUAL STYLES)
+  const houseStyleMaterials = [
+    { // Style 0: Classic Erangel Red Brick Villa with Terracotta Roof
+      wall: new THREE.MeshStandardMaterial({ color: 0x991b1b, roughness: 0.85 }),
+      roof: new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.6 }),
+      trim: new THREE.MeshStandardMaterial({ color: 0xfef08a, roughness: 0.5 })
+    },
+    { // Style 1: Modern Coastal White Plaster with Royal Blue Roof
+      wall: new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.65 }),
+      roof: new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.55 }),
+      trim: new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.5 })
+    },
+    { // Style 2: Warm Amber / Stucco Estate with Slate Dark Roof
+      wall: new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.8 }),
+      roof: new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.7 }),
+      trim: new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.5 })
+    },
+    { // Style 3: Rustic Timber Lodge with Forest Green Roof
+      wall: new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.9 }),
+      roof: new THREE.MeshStandardMaterial({ color: 0x14532d, roughness: 0.65 }),
+      trim: new THREE.MeshStandardMaterial({ color: 0xa16207, roughness: 0.6 })
+    }
+  ];
+
+  // 4. ENTERABLE HOUSE GENERATOR WITH CLIMBABLE STAIRS, STAIRWELL CUTOUT & VARIED ARCHITECTURAL STYLES
+  const addEnterableHouse = (cx, cz, rotY = 0, styleIdx = 0) => {
+    housePositions.push({ cx, cz, rotY });
     const houseGroup = new THREE.Group();
     houseGroup.position.set(cx, 0, cz);
     houseGroup.rotation.y = rotY;
+
+    const style = houseStyleMaterials[Math.abs(styleIdx) % houseStyleMaterials.length];
 
     // Ground Floor Plate
     const gf = new THREE.Mesh(new THREE.BoxGeometry(16, 0.3, 20), floorWoodMat);
     gf.position.set(0, 0.15, 0);
     houseGroup.add(gf);
 
-    const addHW = (w, h, d, px, py, pz, mat = brickMat) => {
+    const addHW = (w, h, d, px, py, pz, mat = style.wall) => {
       const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
       m.position.set(px, py + h / 2, pz);
       m.castShadow = true; m.receiveShadow = true;
       houseGroup.add(m);
     };
 
-    // Ground Floor Walls
+    // Ground Floor Exterior Walls
     addHW(16, 5.8, 0.5, 0, 0.3, -9.75); // Back Wall
     addHW(0.5, 5.8, 20, -7.75, 0.3, 0); // Left Wall
     addHW(0.5, 5.8, 20, 7.75, 0.3, 0);  // Right Wall
-    addHW(5.5, 5.8, 0.5, -5.25, 0.3, 9.75); // Front Wall Left
-    addHW(5.5, 5.8, 0.5, 5.25, 0.3, 9.75);  // Front Wall Right
-    addHW(5.0, 1.8, 0.5, 0, 4.3, 9.75);     // Door Header (Doorway width 5.0m, height 4.0m)
+    addHW(6.7, 5.8, 0.5, -4.65, 0.3, 9.75); // Front Wall Left (-8.0 to -1.3)
+    addHW(6.7, 5.8, 0.5, 4.65, 0.3, 9.75);  // Front Wall Right (+1.3 to +8.0)
+    addHW(2.6, 1.8, 0.5, 0, 4.3, 9.75);     // Door Header (Doorway width 2.6m, height 4.0m)
 
-    // Interior Ground Partition Wall with doorway
-    addHW(6, 5.8, 0.4, 4.5, 0.3, 0);
-    addHW(4, 5.8, 0.4, -5.5, 0.3, 0);
-    addHW(6, 1.6, 0.4, -0.5, 4.5, 0);
+    // Interior Ground Partition Wall (Placed on the LEFT so it NEVER cuts into the stairs!)
+    // Stairs are located on the right side (x: 4.8 to 7.4). Partition wall stays strictly on left x: -7.5 to 2.0!
+    addHW(5.5, 5.8, 0.4, -4.5, 0.3, 0);
+    addHW(3.5, 1.6, 0.4, 0.0, 4.5, 0);
 
-    // 2nd Floor Slab
-    const f2Geom = new THREE.BoxGeometry(16, 0.35, 20);
-    const floor2 = new THREE.Mesh(f2Geom, floorWoodMat);
-    floor2.position.set(0, 6.1, 0);
-    houseGroup.add(floor2);
+    // 2nd Floor Slabs with OPEN STAIRWELL (x: 4.2 to 7.8, z: -8.0 to 5.5 is left completely open for stairs!)
+    const floor2Left = new THREE.Mesh(new THREE.BoxGeometry(12.2, 0.35, 20), floorWoodMat);
+    floor2Left.position.set(-1.9, 6.1, 0);
+    houseGroup.add(floor2Left);
+    // Upper Floor Rear Landing
+    const floor2Landing = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.35, 4.5), floorWoodMat);
+    floor2Landing.position.set(6.1, 6.1, 7.75);
+    houseGroup.add(floor2Landing);
+    // Upper Floor Front Edge
+    const floor2Back = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.35, 2.0), floorWoodMat);
+    floor2Back.position.set(6.1, 6.1, -9.0);
+    houseGroup.add(floor2Back);
 
-    // 2nd Floor Walls & Open Balcony
+    // 2nd Floor Exterior Walls & Balcony
     addHW(16, 5.2, 0.5, 0, 6.25, -9.75);
     addHW(0.5, 5.2, 20, -7.75, 6.25, 0);
     addHW(0.5, 5.2, 20, 7.75, 6.25, 0);
@@ -3791,60 +4350,140 @@ function createPubgSurvivalMap() {
     const bFloor = new THREE.Mesh(new THREE.BoxGeometry(8, 0.3, 4), concreteMat);
     bFloor.position.set(0, 6.1, 11.8);
     houseGroup.add(bFloor);
-    addHW(8, 1.2, 0.3, 0, 6.25, 13.7, metalBridgeMat);
-    addHW(0.3, 1.2, 4, -3.9, 6.25, 11.8, metalBridgeMat);
-    addHW(0.3, 1.2, 4, 3.9, 6.25, 11.8, metalBridgeMat);
+    addHW(8, 1.2, 0.3, 0, 6.25, 13.7, style.trim);
+    addHW(0.3, 1.2, 4, -3.9, 6.25, 11.8, style.trim);
+    addHW(0.3, 1.2, 4, 3.9, 6.25, 11.8, style.trim);
 
     // Pitched Roof
-    const roof = new THREE.Mesh(new THREE.ConeGeometry(12, 3.8, 4), roofTileMat);
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(12, 3.8, 4), style.roof);
     roof.position.set(0, 13.4, 0);
     roof.rotation.y = Math.PI / 4;
     houseGroup.add(roof);
 
-    // Interior Climbable Wooden Staircase
-    const numSteps = 14;
-    const stepH = 5.9 / numSteps; // ~0.42m
-    const stepD = 14.0 / numSteps; // ~1.0m
+    // Interior Climbable Wooden Staircase (Along right interior wall x: 6.0, running from z: -7.0 to 5.5)
+    const numSteps = 16;
+    const stepH = 5.9 / numSteps; // ~0.37m
+    const stepD = 13.0 / numSteps; // ~0.81m
     for (let st = 0; st < numSteps; st++) {
       const stepMesh = new THREE.Mesh(new THREE.BoxGeometry(2.6, stepH, stepD), woodWallMat);
-      stepMesh.position.set(5.5, 0.3 + (st + 0.5) * stepH, -7.5 + (st + 0.5) * stepD);
+      stepMesh.position.set(6.0, 0.3 + (st + 0.5) * stepH, -7.0 + (st + 0.5) * stepD);
       houseGroup.add(stepMesh);
     }
 
+    // Safety railing on 2nd floor around stairwell hole
+    addHW(0.2, 1.1, 12.5, 4.2, 6.25, -0.75, style.trim);
+
     mapGroup.add(houseGroup);
+
+    // Interactive Front Wooden Door with Brass Knob (Width: 2.6m, Height: 4.0m - perfectly fills doorway!)
+    const doorGroup = new THREE.Group();
+    const doorPanel = new THREE.Mesh(new THREE.BoxGeometry(2.6, 4.0, 0.14), woodWallMat);
+    doorPanel.position.set(1.3, 2.0, 0);
+    doorPanel.castShadow = true;
+    const doorKnob = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 12), new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.9, roughness: 0.2 }));
+    doorKnob.position.set(2.35, 2.0, 0.09);
+    doorGroup.add(doorPanel, doorKnob);
+
+    let doorWorldPos;
+    let doorCollider;
+    if (rotY === Math.PI) {
+      doorGroup.position.set(cx + 1.3, 0.3, cz - 9.75);
+      doorGroup.rotation.y = Math.PI;
+      doorWorldPos = new THREE.Vector3(cx, 0.5, cz - 9.75);
+      doorCollider = { minX: cx - 1.35, maxX: cx + 1.35, minZ: cz - 10.3, maxZ: cz - 9.2, minY: 0, maxY: 4.2, isDoor: true };
+    } else {
+      doorGroup.position.set(cx - 1.3, 0.3, cz + 9.75);
+      doorGroup.rotation.y = 0;
+      doorWorldPos = new THREE.Vector3(cx, 0.5, cz + 9.75);
+      doorCollider = { minX: cx - 1.35, maxX: cx + 1.35, minZ: cz + 9.2, maxZ: cz + 10.3, minY: 0, maxY: 4.2, isDoor: true };
+    }
+    mapGroup.add(doorGroup);
+    colliders.push(doorCollider);
+
+    window.houseDoors = window.houseDoors || [];
+    const doorObj = {
+      pos: doorWorldPos,
+      mesh: doorGroup,
+      pivot: doorGroup,
+      baseAngle: (rotY === Math.PI ? Math.PI : 0),
+      openAngle: (rotY === Math.PI ? Math.PI * 0.48 : -Math.PI * 0.48),
+      closedRot: (rotY === Math.PI ? Math.PI : 0),
+      openRot: (rotY === Math.PI ? Math.PI + Math.PI * 0.48 : -Math.PI * 0.48),
+      targetRot: (rotY === Math.PI ? Math.PI : 0),
+      isOpen: false,
+      collider: doorCollider
+    };
+    doorCollider.doorRef = doorObj;
+    window.houseDoors.push(doorObj);
+
+    // Ground floor solid foundation slab so players never clip through terrain inside houses
+    colliders.push({ isFloor: true, minX: cx - 8.2, maxX: cx + 8.2, minZ: cz - 10.2, maxZ: cz + 10.2, minY: 0.0, maxY: 0.35 });
 
     // Colliders for Enterable House
     if (rotY === Math.PI) {
-      colliders.push({ minX: cx - 8.2, maxX: cx + 8.2, minZ: cz + 9.3, maxZ: cz + 10.3, minY: 0, maxY: 12 });
-      colliders.push({ minX: cx - 8.2, maxX: cx - 2.8, minZ: cz - 10.3, maxZ: cz - 9.3, minY: 0, maxY: 12 });
-      colliders.push({ minX: cx + 2.8, maxX: cx + 8.2, minZ: cz - 10.3, maxZ: cz - 9.3, minY: 0, maxY: 12 });
-    } else {
-      colliders.push({ minX: cx - 8.2, maxX: cx + 8.2, minZ: cz - 10.3, maxZ: cz - 9.3, minY: 0, maxY: 12 });
-      colliders.push({ minX: cx - 8.2, maxX: cx - 2.8, minZ: cz + 9.3, maxZ: cz + 10.3, minY: 0, maxY: 12 });
-      colliders.push({ minX: cx + 2.8, maxX: cx + 8.2, minZ: cz + 9.3, maxZ: cz + 10.3, minY: 0, maxY: 12 });
-    }
-    colliders.push({ minX: cx - 8.3, maxX: cx - 7.3, minZ: cz - 10.3, maxZ: cz + 10.3, minY: 0, maxY: 12 });
-    colliders.push({ minX: cx + 7.3, maxX: cx + 8.3, minZ: cz - 10.3, maxZ: cz + 10.3, minY: 0, maxY: 12 });
+      // Exterior Back Wall
+      colliders.push({ minX: cx - 8.4, maxX: cx + 8.4, minZ: cz + 9.0, maxZ: cz + 10.4, minY: 0, maxY: 12 });
+      // Front Wall Left & Right (Generous 3.6m opening so players never snag or get stuck on door edges!)
+      colliders.push({ minX: cx - 8.4, maxX: cx - 1.8, minZ: cz - 10.4, maxZ: cz - 9.0, minY: 0, maxY: 12 });
+      colliders.push({ minX: cx + 1.8, maxX: cx + 8.4, minZ: cz - 10.4, maxZ: cz - 9.0, minY: 0, maxY: 12 });
+      // Interior Partition Wall (Ground floor only, stops at ceiling maxY: 5.8 so 2nd floor is completely free!)
+      colliders.push({ minX: cx + 1.5, maxX: cx + 8.0, minZ: cz - 0.6, maxZ: cz + 0.6, minY: 0, maxY: 5.8 });
+      // Exterior Side Walls
+      colliders.push({ minX: cx - 8.4, maxX: cx - 7.1, minZ: cz - 10.4, maxZ: cz + 10.4, minY: 0, maxY: 12 });
+      colliders.push({ minX: cx + 7.1, maxX: cx + 8.4, minZ: cz - 10.4, maxZ: cz + 10.4, minY: 0, maxY: 12 });
+      // 2nd Floor Balcony - Solid floor slab & safety railings
+      colliders.push({ isFloor: true, minX: cx - 4.2, maxX: cx + 4.2, minZ: cz - 14.0, maxZ: cz - 9.6, minY: 5.9, maxY: 6.35 });
+      colliders.push({ minX: cx - 4.2, maxX: cx + 4.2, minZ: cz - 14.0, maxZ: cz - 13.5, minY: 6.0, maxY: 7.6 });
+      colliders.push({ minX: cx - 4.2, maxX: cx - 3.7, minZ: cz - 14.0, maxZ: cz - 9.6, minY: 6.0, maxY: 7.6 });
+      colliders.push({ minX: cx + 3.7, maxX: cx + 4.2, minZ: cz - 14.0, maxZ: cz - 9.6, minY: 6.0, maxY: 7.6 });
+      
+      // 2nd Floor Main Solid Slabs (Correctly oriented for rotY === Math.PI: Main floor covers cx - 4.4 to cx + 8.2)
+      colliders.push({ isFloor: true, minX: cx - 4.4, maxX: cx + 8.2, minZ: cz - 10.0, maxZ: cz + 10.0, minY: 5.9, maxY: 6.35 });
+      // Upper floor rear landing (opposite of stairwell opening)
+      colliders.push({ isFloor: true, minX: cx - 8.2, maxX: cx - 4.2, minZ: cz - 10.0, maxZ: cz - 5.2, minY: 5.9, maxY: 6.35 });
+      // Upper floor front edge landing
+      colliders.push({ isFloor: true, minX: cx - 8.2, maxX: cx - 4.2, minZ: cz + 7.8, maxZ: cz + 10.0, minY: 5.9, maxY: 6.35 });
 
-    // Stair Colliders
-    if (rotY === Math.PI) {
-      for (let st = 0; st < numSteps; st++) {
-        const sZ = cz + 7.5 - st * stepD;
-        const sY = 0.2 + (st + 1) * stepH;
-        colliders.push({ minX: cx - 6.9, maxX: cx - 4.1, minZ: sZ - stepD * 0.55, maxZ: sZ + stepD * 0.55, minY: 0, maxY: sY });
-      }
-      colliders.push({ minX: cx - 3.8, maxX: cx + 7.8, minZ: cz - 9.8, maxZ: cz + 9.8, minY: 5.9, maxY: 6.35 });
-      colliders.push({ minX: cx - 7.8, maxX: cx - 3.8, minZ: cz - 9.8, maxZ: cz - 0.5, minY: 5.9, maxY: 6.35 });
-      colliders.push({ minX: cx - 4.0, maxX: cx + 4.0, minZ: cz - 13.8, maxZ: cz - 9.8, minY: 5.9, maxY: 6.35 });
+      // RAMP COLLIDER FOR CLIMBABLE STAIRS
+      colliders.push({
+        isStairs: true,
+        minX: cx - 7.5, maxX: cx - 4.5,
+        minZ: cz - 6.0, maxZ: cz + 8.0,
+        minY: 0.1, maxY: 6.25,
+        dirZ: -1
+      });
     } else {
-      for (let st = 0; st < numSteps; st++) {
-        const sZ = cz - 7.5 + st * stepD;
-        const sY = 0.2 + (st + 1) * stepH;
-        colliders.push({ minX: cx + 4.1, maxX: cx + 6.9, minZ: sZ - stepD * 0.55, maxZ: sZ + stepD * 0.55, minY: 0, maxY: sY });
-      }
-      colliders.push({ minX: cx - 7.8, maxX: cx + 3.8, minZ: cz - 9.8, maxZ: cz + 9.8, minY: 5.9, maxY: 6.35 });
-      colliders.push({ minX: cx + 3.8, maxX: cx + 7.8, minZ: cz + 0.5, maxZ: cz + 9.8, minY: 5.9, maxY: 6.35 });
-      colliders.push({ minX: cx - 4.0, maxX: cx + 4.0, minZ: cz + 9.8, maxZ: cz + 13.8, minY: 5.9, maxY: 6.35 });
+      // Exterior Back Wall
+      colliders.push({ minX: cx - 8.4, maxX: cx + 8.4, minZ: cz - 10.4, maxZ: cz - 9.0, minY: 0, maxY: 12 });
+      // Front Wall Left & Right (Generous 3.6m opening)
+      colliders.push({ minX: cx - 8.4, maxX: cx - 1.8, minZ: cz + 9.0, maxZ: cz + 10.4, minY: 0, maxY: 12 });
+      colliders.push({ minX: cx + 1.8, maxX: cx + 8.4, minZ: cz + 9.0, maxZ: cz + 10.4, minY: 0, maxY: 12 });
+      // Interior Partition Wall (Ground floor only, stops at ceiling maxY: 5.8!)
+      colliders.push({ minX: cx - 8.0, maxX: cx - 1.5, minZ: cz - 0.6, maxZ: cz + 0.6, minY: 0, maxY: 5.8 });
+      // Exterior Side Walls
+      colliders.push({ minX: cx - 8.4, maxX: cx - 7.1, minZ: cz - 10.4, maxZ: cz + 10.4, minY: 0, maxY: 12 });
+      colliders.push({ minX: cx + 7.1, maxX: cx + 8.4, minZ: cz - 10.4, maxZ: cz + 10.4, minY: 0, maxY: 12 });
+      // 2nd Floor Balcony - Solid floor slab & safety railings
+      colliders.push({ isFloor: true, minX: cx - 4.2, maxX: cx + 4.2, minZ: cz + 9.6, maxZ: cz + 14.0, minY: 5.9, maxY: 6.35 });
+      colliders.push({ minX: cx - 4.2, maxX: cx + 4.2, minZ: cz + 13.5, maxZ: cz + 14.0, minY: 6.0, maxY: 7.6 });
+      colliders.push({ minX: cx - 4.2, maxX: cx - 3.7, minZ: cz + 9.6, maxZ: cz + 14.0, minY: 6.0, maxY: 7.6 });
+      colliders.push({ minX: cx + 3.7, maxX: cx + 4.2, minZ: cz + 9.6, maxZ: cz + 14.0, minY: 6.0, maxY: 7.6 });
+      
+      // 2nd Floor Main Solid Slabs: Main room covers cx - 8.2 to cx + 4.4
+      colliders.push({ isFloor: true, minX: cx - 8.2, maxX: cx + 4.4, minZ: cz - 10.0, maxZ: cz + 10.0, minY: 5.9, maxY: 6.35 });
+      // Upper floor rear landing
+      colliders.push({ isFloor: true, minX: cx + 4.2, maxX: cx + 8.2, minZ: cz + 5.2, maxZ: cz + 10.0, minY: 5.9, maxY: 6.35 });
+      // Upper floor front edge landing
+      colliders.push({ isFloor: true, minX: cx + 4.2, maxX: cx + 8.2, minZ: cz - 10.0, maxZ: cz - 7.8, minY: 5.9, maxY: 6.35 });
+
+      // RAMP COLLIDER FOR CLIMBABLE STAIRS
+      colliders.push({
+        isStairs: true,
+        minX: cx + 4.5, maxX: cx + 7.5,
+        minZ: cz - 8.0, maxZ: cz + 6.0,
+        minY: 0.1, maxY: 6.25,
+        dirZ: 1
+      });
     }
   };
 
@@ -3956,11 +4595,17 @@ function createPubgSurvivalMap() {
     colliders.push({ minX: cx + 4, maxX: cx + 27, minZ: cz + 19, maxZ: cz + 20, minY: 0, maxY: 12 });
     colliders.push({ minX: cx - 27.2, maxX: cx - 26.2, minZ: cz - 20, maxZ: cz + 20, minY: 0, maxY: 12 });
     colliders.push({ minX: cx + 26.2, maxX: cx + 27.2, minZ: cz - 20, maxZ: cz + 20, minY: 0, maxY: 12 });
-    colliders.push({ minX: cx - 26, maxX: cx + 26, minZ: cz - 19, maxZ: cz + 19, minY: 5.4, maxY: 5.85 });
-    colliders.push({ minX: cx - 27, maxX: cx + 27, minZ: cz - 20, maxZ: cz + 20, minY: 10.4, maxY: 10.85 });
+    colliders.push({ isFloor: true, minX: cx - 26, maxX: cx + 26, minZ: cz - 19, maxZ: cz + 19, minY: 5.4, maxY: 5.85 });
+    colliders.push({ isFloor: true, minX: cx - 27, maxX: cx + 27, minZ: cz - 20, maxZ: cz + 20, minY: 10.4, maxY: 10.85 });
     colliders.push({ minX: cx - 58, maxX: cx - 28, minZ: cz - 14, maxZ: cz - 13, minY: 0, maxY: 12 });
     colliders.push({ minX: cx - 58, maxX: cx - 28, minZ: cz + 13, maxZ: cz + 14, minY: 0, maxY: 12 });
     colliders.push({ minX: cx - 58.2, maxX: cx - 57.2, minZ: cz - 14, maxZ: cz + 14, minY: 0, maxY: 12 });
+
+    // School Interior Staircase Colliders
+    colliders.push({ isStairs: true, minX: cx - 24, maxX: cx - 20, minZ: cz - 13, maxZ: cz - 4, minY: 0.1, maxY: 5.8, dirZ: 1 });
+    colliders.push({ isStairs: true, minX: cx - 24, maxX: cx - 20, minZ: cz - 5, maxZ: cz + 4, minY: 5.5, maxY: 10.8, dirZ: 1 });
+    colliders.push({ isStairs: true, minX: cx + 20, maxX: cx + 24, minZ: cz + 4, maxZ: cz + 13, minY: 0.1, maxY: 5.8, dirZ: -1 });
+    colliders.push({ isStairs: true, minX: cx + 20, maxX: cx + 24, minZ: cz - 4, maxZ: cz + 5, minY: 5.5, maxY: 10.8, dirZ: -1 });
   };
   addPubgSchool(350, 420);
 
@@ -4016,12 +4661,51 @@ function createPubgSurvivalMap() {
 
     mapGroup.add(apt);
 
-    colliders.push({ minX: ax - 11.2, maxX: ax + 11.2, minZ: az - 11.2, maxZ: az - 10.2, minY: 0, maxY: 14.5 });
-    colliders.push({ minX: ax - 11.2, maxX: ax - 2.8, minZ: az + 10.2, maxZ: az + 11.2, minY: 0, maxY: 14.5 });
-    colliders.push({ minX: ax + 2.8, maxX: ax + 11.2, minZ: az + 10.2, maxZ: az + 11.2, minY: 0, maxY: 14.5 });
-    colliders.push({ minX: ax - 11.2, maxX: ax - 10.2, minZ: az - 11.2, maxZ: az + 11.2, minY: 0, maxY: 14.5 });
-    colliders.push({ minX: ax + 10.2, maxX: ax + 11.2, minZ: az - 11.2, maxZ: az + 11.2, minY: 0, maxY: 14.5 });
-    colliders.push({ minX: ax - 11, maxX: ax + 11, minZ: az - 11, maxZ: az + 11, minY: 13.0, maxY: 13.45 });
+    // Accurate Colliders with full rotation support (0, Math.PI, Math.PI/2) and open stairwell
+    if (Math.abs(rotY - Math.PI / 2) < 0.1) {
+      // Rotated 90 degrees: Doorway on East wall (X: ax + 10.7)
+      colliders.push({ minX: ax - 11.2, maxX: ax - 10.2, minZ: az - 11.2, maxZ: az + 11.2, minY: 0, maxY: 14.5 }); // Back Wall (West)
+      colliders.push({ minX: ax + 10.2, maxX: ax + 11.2, minZ: az - 11.2, maxZ: az - 2.8, minY: 0, maxY: 14.5 });  // Front Wall Left (East)
+      colliders.push({ minX: ax + 10.2, maxX: ax + 11.2, minZ: az + 2.8, maxZ: az + 11.2, minY: 0, maxY: 14.5 });  // Front Wall Right (East)
+      colliders.push({ minX: ax - 11.2, maxX: ax + 11.2, minZ: az - 11.2, maxZ: az - 10.2, minY: 0, maxY: 14.5 }); // Side Wall North
+      colliders.push({ minX: ax - 11.2, maxX: ax + 11.2, minZ: az + 10.2, maxZ: az + 11.2, minY: 0, maxY: 14.5 }); // Side Wall South
+      colliders.push({ isFloor: true, minX: ax - 11, maxX: ax + 11, minZ: az - 11, maxZ: az + 11, minY: 13.0, maxY: 13.45 }); // Roof
+      for (let fl = 0; fl < 3; fl++) {
+        const yBase = 0.4 + fl * 4.2;
+        // Floor slab cutout leaves stair area free
+        colliders.push({ isFloor: true, minX: ax - 10, maxX: ax + 10, minZ: az - 10, maxZ: az + 4.0, minY: yBase - 0.1, maxY: yBase + 0.35 });
+        colliders.push({ isFloor: true, minX: ax - 1.0, maxX: ax + 10, minZ: az + 4.0, maxZ: az + 10, minY: yBase - 0.1, maxY: yBase + 0.35 });
+        colliders.push({ isStairs: true, minX: ax - 7.5, maxX: ax - 1.0, minZ: az + 4.5, maxZ: az + 7.5, minY: yBase + 0.1, maxY: yBase + 4.25, dirZ: 1 });
+      }
+    } else if (Math.abs(rotY - Math.PI) < 0.1) {
+      // Rotated 180 degrees: Doorway on North wall (Z: az - 10.7)
+      colliders.push({ minX: ax - 11.2, maxX: ax + 11.2, minZ: az + 10.2, maxZ: az + 11.2, minY: 0, maxY: 14.5 }); // Back Wall (South)
+      colliders.push({ minX: ax - 11.2, maxX: ax - 2.8, minZ: az - 11.2, maxZ: az - 10.2, minY: 0, maxY: 14.5 });  // Front Wall Left (North)
+      colliders.push({ minX: ax + 2.8, maxX: ax + 11.2, minZ: az - 11.2, maxZ: az - 10.2, minY: 0, maxY: 14.5 });  // Front Wall Right (North)
+      colliders.push({ minX: ax - 11.2, maxX: ax - 10.2, minZ: az - 11.2, maxZ: az + 11.2, minY: 0, maxY: 14.5 }); // Left Wall (West)
+      colliders.push({ minX: ax + 10.2, maxX: ax + 11.2, minZ: az - 11.2, maxZ: az + 11.2, minY: 0, maxY: 14.5 }); // Right Wall (East)
+      colliders.push({ isFloor: true, minX: ax - 11, maxX: ax + 11, minZ: az - 11, maxZ: az + 11, minY: 13.0, maxY: 13.45 }); // Roof
+      for (let fl = 0; fl < 3; fl++) {
+        const yBase = 0.4 + fl * 4.2;
+        colliders.push({ isFloor: true, minX: ax - 10, maxX: ax + 4.0, minZ: az - 10, maxZ: az + 10, minY: yBase - 0.1, maxY: yBase + 0.35 });
+        colliders.push({ isFloor: true, minX: ax + 4.0, maxX: ax + 10, minZ: az - 10, maxZ: az + 0.5, minY: yBase - 0.1, maxY: yBase + 0.35 });
+        colliders.push({ isStairs: true, minX: ax + 4.5, maxX: ax + 7.5, minZ: az + 1.0, maxZ: az + 7.5, minY: yBase + 0.1, maxY: yBase + 4.25, dirZ: -1 });
+      }
+    } else {
+      // Default rotY 0: Doorway on South wall (Z: az + 10.7)
+      colliders.push({ minX: ax - 11.2, maxX: ax + 11.2, minZ: az - 11.2, maxZ: az - 10.2, minY: 0, maxY: 14.5 }); // Back Wall (North)
+      colliders.push({ minX: ax - 11.2, maxX: ax - 2.8, minZ: az + 10.2, maxZ: az + 11.2, minY: 0, maxY: 14.5 });  // Front Wall Left (South)
+      colliders.push({ minX: ax + 2.8, maxX: ax + 11.2, minZ: az + 10.2, maxZ: az + 11.2, minY: 0, maxY: 14.5 });  // Front Wall Right (South)
+      colliders.push({ minX: ax - 11.2, maxX: ax - 10.2, minZ: az - 11.2, maxZ: az + 11.2, minY: 0, maxY: 14.5 }); // Left Wall (West)
+      colliders.push({ minX: ax + 10.2, maxX: ax + 11.2, minZ: az - 11.2, maxZ: az + 11.2, minY: 0, maxY: 14.5 }); // Right Wall (East)
+      colliders.push({ isFloor: true, minX: ax - 11, maxX: ax + 11, minZ: az - 11, maxZ: az + 11, minY: 13.0, maxY: 13.45 }); // Roof
+      for (let fl = 0; fl < 3; fl++) {
+        const yBase = 0.4 + fl * 4.2;
+        colliders.push({ isFloor: true, minX: ax - 4.0, maxX: ax + 10, minZ: az - 10, maxZ: az + 10, minY: yBase - 0.1, maxY: yBase + 0.35 });
+        colliders.push({ isFloor: true, minX: ax - 10, maxX: ax - 4.0, minZ: az - 0.5, maxZ: az + 10, minY: yBase - 0.1, maxY: yBase + 0.35 });
+        colliders.push({ isStairs: true, minX: ax - 7.5, maxX: ax - 4.5, minZ: az - 7.5, maxZ: az - 1.0, minY: yBase + 0.1, maxY: yBase + 4.25, dirZ: 1 });
+      }
+    }
   };
 
   // School Apartments Cluster
@@ -4074,26 +4758,26 @@ function createPubgSurvivalMap() {
   };
   addPochinkiChurch(-340, -10);
 
-  // 8. DENSE POCHINKI TOWN (16 ENTERABLE 2-STORY HOUSES!)
+  // 8. DENSE POCHINKI TOWN (16 ENTERABLE 2-STORY HOUSES WITH 4 DIVERSE ARCHITECTURAL STYLES!)
   // South Avenue (Z: -60)
-  addEnterableHouse(-45, -60, 0);
-  addEnterableHouse(-80, -60, 0);
-  addEnterableHouse(-115, -60, 0);
-  addEnterableHouse(-150, -60, 0);
-  addEnterableHouse(-185, -60, 0);
-  addEnterableHouse(-220, -60, 0);
-  addEnterableHouse(-255, -60, 0);
-  addEnterableHouse(-290, -60, 0);
+  addEnterableHouse(-45, -60, 0, 0);
+  addEnterableHouse(-80, -60, 0, 1);
+  addEnterableHouse(-115, -60, 0, 2);
+  addEnterableHouse(-150, -60, 0, 3);
+  addEnterableHouse(-185, -60, 0, 0);
+  addEnterableHouse(-220, -60, 0, 1);
+  addEnterableHouse(-255, -60, 0, 2);
+  addEnterableHouse(-290, -60, 0, 3);
 
   // North Avenue (Z: 40)
-  addEnterableHouse(-45, 40, Math.PI);
-  addEnterableHouse(-80, 40, Math.PI);
-  addEnterableHouse(-115, 40, Math.PI);
-  addEnterableHouse(-150, 40, Math.PI);
-  addEnterableHouse(-185, 40, Math.PI);
-  addEnterableHouse(-220, 40, Math.PI);
-  addEnterableHouse(-255, 40, Math.PI);
-  addEnterableHouse(-290, 40, Math.PI);
+  addEnterableHouse(-45, 40, Math.PI, 1);
+  addEnterableHouse(-80, 40, Math.PI, 2);
+  addEnterableHouse(-115, 40, Math.PI, 3);
+  addEnterableHouse(-150, 40, Math.PI, 0);
+  addEnterableHouse(-185, 40, Math.PI, 1);
+  addEnterableHouse(-220, 40, Math.PI, 2);
+  addEnterableHouse(-255, 40, Math.PI, 3);
+  addEnterableHouse(-290, 40, Math.PI, 0);
 
   // Pochinki Stone Walls & Fences
   addBoxObject(110, 1.5, 0.6, -110, 0, -85, concreteMat);
@@ -4101,22 +4785,22 @@ function createPubgSurvivalMap() {
   addBoxObject(110, 1.5, 0.6, -110, 0, 65, concreteMat);
   addBoxObject(110, 1.5, 0.6, -235, 0, 65, concreteMat);
 
-  // 9. ROZHOK RIDGE (12 ENTERABLE 2-STORY HOUSES)
+  // 9. ROZHOK RIDGE (12 ENTERABLE 2-STORY HOUSES WITH DIVERSE STYLES)
   // South Row (Z: 760)
-  addEnterableHouse(-40, 760, 0);
-  addEnterableHouse(0, 760, 0);
-  addEnterableHouse(40, 760, 0);
-  addEnterableHouse(80, 760, 0);
-  addEnterableHouse(120, 760, 0);
-  addEnterableHouse(160, 760, 0);
+  addEnterableHouse(-40, 760, 0, 2);
+  addEnterableHouse(0, 760, 0, 3);
+  addEnterableHouse(40, 760, 0, 0);
+  addEnterableHouse(80, 760, 0, 1);
+  addEnterableHouse(120, 760, 0, 2);
+  addEnterableHouse(160, 760, 0, 3);
 
   // North Row (Z: 880)
-  addEnterableHouse(-40, 880, Math.PI);
-  addEnterableHouse(0, 880, Math.PI);
-  addEnterableHouse(40, 880, Math.PI);
-  addEnterableHouse(80, 880, Math.PI);
-  addEnterableHouse(120, 880, Math.PI);
-  addEnterableHouse(160, 880, Math.PI);
+  addEnterableHouse(-40, 880, Math.PI, 3);
+  addEnterableHouse(0, 880, Math.PI, 0);
+  addEnterableHouse(40, 880, Math.PI, 1);
+  addEnterableHouse(80, 880, Math.PI, 2);
+  addEnterableHouse(120, 880, Math.PI, 3);
+  addEnterableHouse(160, 880, Math.PI, 0);
 
   // Rozhok Water Tower
   const wtLegMat = metalBridgeMat;
@@ -4129,14 +4813,14 @@ function createPubgSurvivalMap() {
   mapGroup.add(tank);
 
   // 10. YASNAYA POLYANA (8 HOUSES + 2 APARTMENTS + CLOCK TOWER)
-  addEnterableHouse(220, 750, 0);
-  addEnterableHouse(260, 750, 0);
-  addEnterableHouse(300, 750, 0);
-  addEnterableHouse(340, 750, 0);
-  addEnterableHouse(220, 840, Math.PI);
-  addEnterableHouse(260, 840, Math.PI);
-  addEnterableHouse(300, 840, Math.PI);
-  addEnterableHouse(340, 840, Math.PI);
+  addEnterableHouse(220, 750, 0, 1);
+  addEnterableHouse(260, 750, 0, 2);
+  addEnterableHouse(300, 750, 0, 3);
+  addEnterableHouse(340, 750, 0, 0);
+  addEnterableHouse(220, 840, Math.PI, 0);
+  addEnterableHouse(260, 840, Math.PI, 1);
+  addEnterableHouse(300, 840, Math.PI, 2);
+  addEnterableHouse(340, 840, Math.PI, 3);
   addApartmentBuilding(380, 740, 0);
   addApartmentBuilding(380, 840, Math.PI);
 
@@ -4145,12 +4829,12 @@ function createPubgSurvivalMap() {
   const clockDial = addBoxObject(4.5, 4.5, 0.4, 300, 30, 805.2, floorWoodMat);
 
   // 11. FARM ESTATE (6 ENTERABLE HOUSES + 2 RED BARNS)
-  addEnterableHouse(80, -550, 0);
-  addEnterableHouse(120, -550, 0);
-  addEnterableHouse(160, -550, 0);
-  addEnterableHouse(80, -650, Math.PI);
-  addEnterableHouse(120, -650, Math.PI);
-  addEnterableHouse(160, -650, Math.PI);
+  addEnterableHouse(80, -550, 0, 3);
+  addEnterableHouse(120, -550, 0, 0);
+  addEnterableHouse(160, -550, 0, 1);
+  addEnterableHouse(80, -650, Math.PI, 2);
+  addEnterableHouse(120, -650, Math.PI, 3);
+  addEnterableHouse(160, -650, Math.PI, 0);
 
   const addBarn = (bx, bz) => {
     const barn = new THREE.Group();
@@ -4231,11 +4915,20 @@ function createPubgSurvivalMap() {
     wh.add(roofM);
     mapGroup.add(wh);
 
-    colliders.push({ minX: wx - 23, maxX: wx + 23, minZ: wz - 13.2, maxZ: wz - 12.2, minY: 0, maxY: 11 });
-    colliders.push({ minX: wx - 23, maxX: wx - 21.6, minZ: wz - 13.2, maxZ: wz + 13.2, minY: 0, maxY: 11 });
-    colliders.push({ minX: wx + 21.6, maxX: wx + 23, minZ: wz - 13.2, maxZ: wz + 13.2, minY: 0, maxY: 11 });
-    colliders.push({ minX: wx - 23, maxX: wx - 6.5, minZ: wz + 12.2, maxZ: wz + 13.2, minY: 0, maxY: 11 });
-    colliders.push({ minX: wx + 6.5, maxX: wx + 23, minZ: wz + 12.2, maxZ: wz + 13.2, minY: 0, maxY: 11 });
+    if (Math.abs(rot - Math.PI / 2) < 0.1) {
+      // Rotated 90 degrees: Length 45m along Z, width 26m along X. Door on East wall (X: wx + 12.7)
+      colliders.push({ minX: wx - 13.2, maxX: wx - 12.2, minZ: wz - 23, maxZ: wz + 23, minY: 0, maxY: 11 }); // Back wall (West)
+      colliders.push({ minX: wx - 13.2, maxX: wx + 13.2, minZ: wz - 23, maxZ: wz - 21.6, minY: 0, maxY: 11 }); // Side wall Left (North)
+      colliders.push({ minX: wx - 13.2, maxX: wx + 13.2, minZ: wz + 21.6, maxZ: wz + 23, minY: 0, maxY: 11 }); // Side wall Right (South)
+      colliders.push({ minX: wx + 12.2, maxX: wx + 13.2, minZ: wz - 23, maxZ: wz - 6.5, minY: 0, maxY: 11 });  // Front wall Left (East)
+      colliders.push({ minX: wx + 12.2, maxX: wx + 13.2, minZ: wz + 6.5, maxZ: wz + 23, minY: 0, maxY: 11 });  // Front wall Right (East)
+    } else {
+      colliders.push({ minX: wx - 23, maxX: wx + 23, minZ: wz - 13.2, maxZ: wz - 12.2, minY: 0, maxY: 11 });
+      colliders.push({ minX: wx - 23, maxX: wx - 21.6, minZ: wz - 13.2, maxZ: wz + 13.2, minY: 0, maxY: 11 });
+      colliders.push({ minX: wx + 21.6, maxX: wx + 23, minZ: wz - 13.2, maxZ: wz + 13.2, minY: 0, maxY: 11 });
+      colliders.push({ minX: wx - 23, maxX: wx - 6.5, minZ: wz + 12.2, maxZ: wz + 13.2, minY: 0, maxY: 11 });
+      colliders.push({ minX: wx + 6.5, maxX: wx + 23, minZ: wz + 12.2, maxZ: wz + 13.2, minY: 0, maxY: 11 });
+    }
   };
   addWarehouse(0, -900, 0);
   addWarehouse(-70, -860, Math.PI / 2);
@@ -4255,7 +4948,7 @@ function createPubgSurvivalMap() {
   addWatchtower(90, 520);
   addWatchtower(260, 950);
 
-  // 14. SPARSE REALISTIC RNG LOOT SYSTEM (~35% CHANCE: MANY ROOMS EMPTY AS REQUESTED)
+  // 14. RICH & DIVERSE PUBG RNG LOOT SYSTEM (Silencer, Bandage, Frag Grenade, Smoke Grenade, Armor, Helmet, Medkit, Energy Drink, Weapons, Scopes)
   const addBandageLoot = (lx, ly, lz) => {
     const lg = new THREE.Group(); lg.position.set(lx, ly + 0.35, lz);
     const r1 = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.5, 18), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 }));
@@ -4264,15 +4957,139 @@ function createPubgSurvivalMap() {
     const ring = new THREE.Mesh(new THREE.RingGeometry(0.65, 0.9, 24), new THREE.MeshBasicMaterial({ color: 0x22c55e, side: THREE.DoubleSide }));
     ring.rotation.x = -Math.PI / 2; ring.position.y = -0.3; lg.add(ring);
     mapGroup.add(lg);
-    lootItems.push({ type: 'bandage', name: '3x Bandaj (+45 Can)', mesh: lg, pos: new THREE.Vector3(lx, ly, lz), radius: 3.2, collected: false });
+    lootItems.push({ type: 'bandage', name: '🩹 3x Bandaj (+45 Can)', mesh: lg, pos: new THREE.Vector3(lx, ly, lz), radius: 3.2, collected: false });
   };
 
   const addMedkitLoot = (lx, ly, lz) => {
     const lg = new THREE.Group(); lg.position.set(lx, ly + 0.45, lz);
     const box = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.55, 0.75), new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.35 }));
     lg.add(box);
+    const cross1 = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.05, 0.15), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    cross1.position.set(0, 0.28, 0); lg.add(cross1);
+    const cross2 = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.05, 0.5), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    cross2.position.set(0, 0.28, 0); lg.add(cross2);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.75, 1.05, 24), new THREE.MeshBasicMaterial({ color: 0xef4444, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = -0.4; lg.add(ring);
     mapGroup.add(lg);
-    lootItems.push({ type: 'medkit', name: 'İlk Yardım Çantası (Tam Can)', mesh: lg, pos: new THREE.Vector3(lx, ly, lz), radius: 3.2, collected: false });
+    lootItems.push({ type: 'medkit', name: '💊 İlk Yardım Kiti (Tam Can 150)', mesh: lg, pos: new THREE.Vector3(lx, ly, lz), radius: 3.2, collected: false });
+  };
+
+  const addFragGrenadeLoot = (lx, ly, lz) => {
+    const lg = new THREE.Group(); lg.position.set(lx, ly + 0.35, lz);
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.35, 14, 14), new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.8 }));
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.25, 10), new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.8 }));
+    cap.position.y = 0.35;
+    lg.add(body, cap);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.65, 0.9, 24), new THREE.MeshBasicMaterial({ color: 0xf97316, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = -0.3; lg.add(ring);
+    mapGroup.add(lg);
+    lootItems.push({ type: 'frag_grenade', name: '💣 2x El Bombası (Patlayıcı)', mesh: lg, pos: new THREE.Vector3(lx, ly, lz), radius: 3.2, collected: false });
+  };
+
+  const addSmokeGrenadeLoot = (lx, ly, lz) => {
+    const lg = new THREE.Group(); lg.position.set(lx, ly + 0.35, lz);
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.65, 16), new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.7 }));
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.15, 16), new THREE.MeshStandardMaterial({ color: 0x38bdf8 }));
+    band.position.y = 0.12;
+    lg.add(body, band);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.65, 0.9, 24), new THREE.MeshBasicMaterial({ color: 0x38bdf8, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = -0.3; lg.add(ring);
+    mapGroup.add(lg);
+    lootItems.push({ type: 'smoke_grenade', name: '💨 2x Sis Bombası (Sis Kalkanı)', mesh: lg, pos: new THREE.Vector3(lx, ly, lz), radius: 3.2, collected: false });
+  };
+
+  const addAmmoBoxLoot = (ammoType, count, lx, ly, lz) => {
+    const lg = new THREE.Group(); lg.position.set(lx, ly + 0.35, lz);
+    const boxMat = new THREE.MeshStandardMaterial({ color: ammoType === '9mm' ? 0xb45309 : (ammoType === '7.62mm' ? 0x991b1b : 0x15803d), roughness: 0.5 });
+    const box = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.35, 0.45), boxMat);
+    lg.add(box);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.65, 0.9, 24), new THREE.MeshBasicMaterial({ color: 0xfacc15, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = -0.3; lg.add(ring);
+    mapGroup.add(lg);
+    lootItems.push({ type: 'ammo_box', ammoType: ammoType, count: count, name: `📦 ${ammoType} Mermi Kutusu (+${count} Mermi)`, mesh: lg, pos: new THREE.Vector3(lx, ly, lz), radius: 3.2, collected: false });
+  };
+
+  const addArmorLoot = (level = 2, lx, ly, lz) => {
+    const lg = new THREE.Group(); lg.position.set(lx, ly + 0.35, lz);
+    const color = level === 3 ? 0x0f172a : (level === 2 ? 0x1e3a8a : 0x475569);
+    const vest = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.85, 0.4), new THREE.MeshStandardMaterial({ color, roughness: 0.85 }));
+    lg.add(vest);
+    const ringColor = level === 3 ? 0xf59e0b : (level === 2 ? 0x38bdf8 : 0x94a3b8);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.7, 0.95, 24), new THREE.MeshBasicMaterial({ color: ringColor, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = -0.3; lg.add(ring);
+    mapGroup.add(lg);
+    const pct = level === 3 ? '%55' : (level === 2 ? '%40' : '%20');
+    lootItems.push({ type: 'armor', level: level, name: `🛡️ Seviye ${level} Çelik Yelek (${pct} Hasar Emme)`, mesh: lg, pos: new THREE.Vector3(lx, ly, lz), radius: 3.2, collected: false });
+  };
+
+  const addHelmetLoot = (level = 2, lx, ly, lz) => {
+    const lg = new THREE.Group(); lg.position.set(lx, ly + 0.35, lz);
+    const color = level === 3 ? 0x0f172a : (level === 2 ? 0x334155 : 0x64748b);
+    const helm = new THREE.Mesh(new THREE.SphereGeometry(0.38, 16, 12), new THREE.MeshStandardMaterial({ color, roughness: 0.6 }));
+    helm.scale.set(1, 0.8, 1.1);
+    lg.add(helm);
+    const ringColor = level === 3 ? 0xf59e0b : (level === 2 ? 0xa855f7 : 0x94a3b8);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.7, 0.95, 24), new THREE.MeshBasicMaterial({ color: ringColor, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = -0.3; lg.add(ring);
+    mapGroup.add(lg);
+    const pct = level === 3 ? '%55' : (level === 2 ? '%40' : '%25');
+    lootItems.push({ type: 'helmet', level: level, name: `🪖 Seviye ${level} Kask (${pct} Kafa Koruma)`, mesh: lg, pos: new THREE.Vector3(lx, ly, lz), radius: 3.2, collected: false });
+  };
+
+  const addBackpackLoot = (level = 2, lx, ly, lz) => {
+    const lg = new THREE.Group(); lg.position.set(lx, ly + 0.35, lz);
+    const color = level === 3 ? 0x14532d : (level === 2 ? 0x78350f : 0x475569);
+    const bp = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.8, 0.45), new THREE.MeshStandardMaterial({ color, roughness: 0.85 }));
+    lg.add(bp);
+    const ringColor = level === 3 ? 0xf59e0b : (level === 2 ? 0x10b981 : 0x94a3b8);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.7, 0.95, 24), new THREE.MeshBasicMaterial({ color: ringColor, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = -0.3; lg.add(ring);
+    mapGroup.add(lg);
+    const cap = level === 3 ? '400' : (level === 2 ? '250' : '150');
+    lootItems.push({ type: 'backpack', level: level, name: `🎒 Seviye ${level} Çanta (Kapasite: ${cap})`, mesh: lg, pos: new THREE.Vector3(lx, ly, lz), radius: 3.2, collected: false });
+  };
+
+  const addReviveBeacon = (bx, bz) => {
+    const bg = new THREE.Group(); bg.position.set(bx, 0, bz);
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.6, 0.6, 16), concreteMat);
+    base.position.y = 0.3; bg.add(base);
+    const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.5, 3.8, 12), metalBridgeMat);
+    pillar.position.y = 2.2; bg.add(pillar);
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(0.7, 16, 12), new THREE.MeshStandardMaterial({ color: 0x00f0ff, roughness: 0.2, emissive: 0x00f0ff, emissiveIntensity: 0.8 }));
+    dome.position.y = 4.2; bg.add(dome);
+    const ring1 = new THREE.Mesh(new THREE.RingGeometry(1.8, 2.3, 32), new THREE.MeshBasicMaterial({ color: 0x00f0ff, side: THREE.DoubleSide, transparent: true, opacity: 0.85 }));
+    ring1.rotation.x = -Math.PI / 2; ring1.position.y = 0.65; bg.add(ring1);
+    const ring2 = new THREE.Mesh(new THREE.RingGeometry(2.6, 3.1, 32), new THREE.MeshBasicMaterial({ color: 0x38bdf8, side: THREE.DoubleSide, transparent: true, opacity: 0.55 }));
+    ring2.rotation.x = -Math.PI / 2; ring2.position.y = 0.65; bg.add(ring2);
+    mapGroup.add(bg);
+    colliders.push({ minX: bx - 1.6, maxX: bx + 1.6, minZ: bz - 1.6, maxZ: bz + 1.6, minY: 0, maxY: 4.5 });
+    window.reviveBeacons = window.reviveBeacons || [];
+    window.reviveBeacons.push({ pos: new THREE.Vector3(bx, 0, bz), mesh: bg, name: 'Yeniden Canlandırma Kulesi (Recall Station)' });
+  };
+
+  // Add 2 Iconic Revive Beacons (Pochinki & School)
+  addReviveBeacon(-60, -10);
+  addReviveBeacon(350, 450);
+
+  const addEnergyDrinkLoot = (lx, ly, lz) => {
+    const lg = new THREE.Group(); lg.position.set(lx, ly + 0.35, lz);
+    const can = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.55, 14), new THREE.MeshStandardMaterial({ color: 0x2563eb, roughness: 0.3, metalness: 0.7 }));
+    lg.add(can);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.6, 0.85, 24), new THREE.MeshBasicMaterial({ color: 0x60a5fa, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = -0.3; lg.add(ring);
+    mapGroup.add(lg);
+    lootItems.push({ type: 'energy_drink', name: '⚡ Enerji İçeceği (+%25 Koşu Hızı)', mesh: lg, pos: new THREE.Vector3(lx, ly, lz), radius: 3.2, collected: false });
+  };
+
+  const addScopeLoot = (lx, ly, lz) => {
+    const lg = new THREE.Group(); lg.position.set(lx, ly + 0.35, lz);
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 0.7, 14), new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.8 }));
+    body.rotation.z = Math.PI / 2;
+    lg.add(body);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.65, 0.9, 24), new THREE.MeshBasicMaterial({ color: 0x06b6d4, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = -0.3; lg.add(ring);
+    mapGroup.add(lg);
+    lootItems.push({ type: 'scope', name: '🔭 4x Dürbün (ACOG Uzak Nişan)', mesh: lg, pos: new THREE.Vector3(lx, ly, lz), radius: 3.2, collected: false });
   };
 
   const addWeaponLoot = (gunName, lx, ly, lz) => {
@@ -4281,7 +5098,7 @@ function createPubgSurvivalMap() {
     if (gunName === 'Sniper') wModel = createSniperModel(false);
     else if (gunName === 'Shawty') wModel = createShawtyModel(false);
     else if (gunName === 'Burst Rifle') wModel = createBurstRifleModel(false);
-    else if (gunName === 'Pistol') wModel = createTwoTonePistolModel(false);
+    else if (gunName === 'Pistol' || gunName === 'Deagle' || gunName === 'Revolver') wModel = createTwoTonePistolModel(false);
     else wModel = createAuthenticAK47Model(false);
     wModel.scale.set(0.65, 0.65, 0.65);
     lg.add(wModel);
@@ -4302,95 +5119,185 @@ function createPubgSurvivalMap() {
     lootItems.push({ type: 'silencer', name: '🤫 Susturucu (Silencer) Al', mesh: lg, pos: new THREE.Vector3(lx, ly, lz), radius: 3.2, collected: false });
   };
 
-  // Loot spots throughout houses, school, apartments, church, and warehouses
-  const candidateLootSpots = [
-    // PUBG SCHOOL
-    { x: 350, y: 0.2, z: 410, pref: 'weapon' }, { x: 340, y: 0.2, z: 425, pref: 'weapon' },
-    { x: 360, y: 0.2, z: 425, pref: 'bandage' }, { x: 340, y: 5.8, z: 415, pref: 'weapon' },
-    { x: 360, y: 5.8, z: 415, pref: 'silencer' }, { x: 350, y: 11.0, z: 420, pref: 'sniper' },
-    { x: 338, y: 11.0, z: 430, pref: 'weapon' }, { x: 362, y: 11.0, z: 410, pref: 'medkit' },
-    { x: 307, y: 0.2, z: 420, pref: 'weapon' }, { x: 298, y: 3.8, z: 420, pref: 'silencer' },
-    // SCHOOL APARTMENTS
-    { x: 460, y: 0.2, z: 390, pref: 'weapon' }, { x: 460, y: 8.8, z: 390, pref: 'medkit' }, { x: 460, y: 13.5, z: 390, pref: 'sniper' },
-    { x: 460, y: 0.2, z: 450, pref: 'weapon' }, { x: 460, y: 13.5, z: 450, pref: 'sniper' },
-    { x: 510, y: 0.2, z: 420, pref: 'weapon' }, { x: 510, y: 13.5, z: 420, pref: 'silencer' },
-    // POCHINKI CHURCH & HOUSES
-    { x: -340, y: 0.2, z: -10, pref: 'weapon' }, { x: -348, y: 14.0, z: 6, pref: 'sniper' },
-    { x: -45, y: 0.2, z: -60, pref: 'weapon' }, { x: -80, y: 0.2, z: -60, pref: 'bandage' }, { x: -80, y: 6.4, z: -60, pref: 'medkit' },
-    { x: -115, y: 0.2, z: -60, pref: 'weapon' }, { x: -150, y: 6.4, z: -60, pref: 'silencer' },
-    { x: -185, y: 0.2, z: -60, pref: 'weapon' }, { x: -220, y: 0.2, z: -60, pref: 'weapon' },
-    { x: -45, y: 0.2, z: 40, pref: 'weapon' }, { x: -80, y: 0.2, z: 40, pref: 'bandage' },
-    { x: -115, y: 6.4, z: 40, pref: 'silencer' }, { x: -150, y: 0.2, z: 40, pref: 'weapon' },
-    { x: -185, y: 6.4, z: 40, pref: 'medkit' }, { x: -220, y: 0.2, z: 40, pref: 'weapon' },
-    // ROZHOK RIDGE
-    { x: -40, y: 0.2, z: 760, pref: 'weapon' }, { x: 0, y: 0.2, z: 760, pref: 'bandage' },
-    { x: 40, y: 6.4, z: 760, pref: 'silencer' }, { x: 80, y: 0.2, z: 760, pref: 'weapon' },
-    { x: 120, y: 0.2, z: 760, pref: 'medkit' }, { x: 160, y: 6.4, z: 760, pref: 'weapon' },
-    { x: 0, y: 0.2, z: 880, pref: 'weapon' }, { x: 40, y: 0.2, z: 880, pref: 'bandage' },
-    { x: 80, y: 6.4, z: 880, pref: 'silencer' }, { x: 120, y: 0.2, z: 880, pref: 'weapon' },
-    // YASNAYA POLYANA
-    { x: 220, y: 0.2, z: 750, pref: 'weapon' }, { x: 260, y: 6.4, z: 750, pref: 'silencer' },
-    { x: 300, y: 0.2, z: 750, pref: 'medkit' }, { x: 340, y: 0.2, z: 750, pref: 'weapon' },
-    { x: 220, y: 0.2, z: 840, pref: 'bandage' }, { x: 260, y: 0.2, z: 840, pref: 'weapon' },
-    { x: 380, y: 0.2, z: 740, pref: 'weapon' }, { x: 380, y: 13.5, z: 740, pref: 'sniper' },
-    { x: 300, y: 0.2, z: 800, pref: 'weapon' },
-    // FARM & COAST
-    { x: 80, y: 0.2, z: -550, pref: 'weapon' }, { x: 120, y: 0.2, z: -550, pref: 'bandage' },
-    { x: 160, y: 6.4, z: -550, pref: 'weapon' }, { x: 120, y: 0.2, z: -470, pref: 'weapon' },
-    { x: 180, y: 0.2, z: -470, pref: 'silencer' },
-    { x: -120, y: 0.2, z: -750, pref: 'weapon' }, { x: -160, y: 0.2, z: -750, pref: 'bandage' },
-    { x: -280, y: 0.2, z: -800, pref: 'sniper' },
-    // WAREHOUSES & PORT
-    { x: 0, y: 0.2, z: -900, pref: 'weapon' }, { x: -70, y: 0.2, z: -860, pref: 'silencer' },
-    { x: -280, y: 0.2, z: 650, pref: 'weapon' }
-  ];
+  // Mermi Çoğaltıcı / Uzatılmış Hızlı Çekim Şarjör
+  const addExtendedMagLoot = (lx, ly, lz) => {
+    const lg = new THREE.Group(); lg.position.set(lx, ly + 0.35, lz);
+    const mag = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.65, 0.45), new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.9, roughness: 0.2 }));
+    mag.rotation.x = 0.2;
+    lg.add(mag);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.65, 0.9, 24), new THREE.MeshBasicMaterial({ color: 0xeab308, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = -0.3; lg.add(ring);
+    mapGroup.add(lg);
+    lootItems.push({ type: 'extended_mag', name: '⚡ Uzatılmış Şarjör / Mermi Çoğaltıcı (+15 Şarjör & +90 Mermi)', mesh: lg, pos: new THREE.Vector3(lx, ly, lz), radius: 3.2, collected: false });
+  };
 
-  // ~35% spawn chance: Authentic PUBG loot distribution (many rooms remain empty)
-  candidateLootSpots.forEach(spot => {
-    if (Math.random() < 0.35) {
-      const roll = Math.random();
-      if (spot.pref === 'sniper' && Math.random() < 0.5) {
-        addWeaponLoot('Sniper', spot.x, spot.y, spot.z);
-      } else if (spot.pref === 'silencer' && Math.random() < 0.4) {
-        addSilencerLoot(spot.x, spot.y, spot.z);
-      } else if (roll < 0.35) {
-        addBandageLoot(spot.x, spot.y, spot.z);
-      } else if (roll < 0.65) {
-        addWeaponLoot('Pistol', spot.x, spot.y, spot.z);
-      } else if (roll < 0.80) {
-        addWeaponLoot('Shawty', spot.x, spot.y, spot.z);
-      } else if (roll < 0.92) {
-        addWeaponLoot('AK-47', spot.x, spot.y, spot.z);
-      } else if (roll < 0.96) {
-        addSilencerLoot(spot.x, spot.y, spot.z);
+  // 14. RICH & DIVERSE PROCEDURAL PUBG LOOT GENERATOR
+  const spawnRandomLootAt = (x, y, z, category = null) => {
+    const roll = Math.random();
+    if (category === 'weapon' || (!category && roll < 0.20)) {
+      const gRoll = Math.random();
+      if (gRoll < 0.25) addWeaponLoot('AK-47', x, y, z);
+      else if (gRoll < 0.45) addWeaponLoot('Burst Rifle', x, y, z);
+      else if (gRoll < 0.60) addWeaponLoot('Sniper', x, y, z);
+      else if (gRoll < 0.75) addWeaponLoot('Shawty', x, y, z);
+      else if (gRoll < 0.90) addWeaponLoot('Deagle', x, y, z);
+      else addWeaponLoot('Minigun', x, y, z);
+    } else if (category === 'armor' || (!category && roll < 0.35)) {
+      const aRoll = Math.random();
+      if (aRoll < 0.50) {
+        const lvl = Math.random() < 0.25 ? 3 : (Math.random() < 0.65 ? 2 : 1);
+        addArmorLoot(lvl, x, y, z);
       } else {
-        addMedkitLoot(spot.x, spot.y, spot.z);
+        const lvl = Math.random() < 0.25 ? 3 : (Math.random() < 0.65 ? 2 : 1);
+        addHelmetLoot(lvl, x, y, z);
       }
+    } else if (category === 'gear' || (!category && roll < 0.50)) {
+      const gRoll = Math.random();
+      if (gRoll < 0.35) {
+        addBackpackLoot(Math.random() < 0.4 ? 3 : 2, x, y, z);
+      } else if (gRoll < 0.60) {
+        addSilencerLoot(x, y, z);
+      } else if (gRoll < 0.82) {
+        addExtendedMagLoot(x, y, z);
+      } else {
+        addScopeLoot(x, y, z);
+      }
+    } else if (category === 'grenade' || (!category && roll < 0.65)) {
+      if (Math.random() < 0.5) addSmokeGrenadeLoot(x, y, z);
+      else addFragGrenadeLoot(x, y, z);
+    } else if (category === 'med' || (!category && roll < 0.80)) {
+      const mRoll = Math.random();
+      if (mRoll < 0.4) addBandageLoot(x, y, z);
+      else if (mRoll < 0.75) addEnergyDrinkLoot(x, y, z);
+      else addMedkitLoot(x, y, z);
+    } else {
+      const aRoll = Math.random();
+      if (aRoll < 0.4) addAmmoBoxLoot('5.56mm', 90, x, y, z);
+      else if (aRoll < 0.75) addAmmoBoxLoot('7.62mm', 90, x, y, z);
+      else addAmmoBoxLoot('9mm', 60, x, y, z);
+    }
+  };
+
+  // A. Procedural loot placement inside enterable houses (Balanced: 1 to 2 items per house, not flooded)
+  housePositions.forEach(hp => {
+    const isRot = (hp.rotY === Math.PI);
+    // 50% chance for ground floor item
+    if (Math.random() < 0.50) {
+      spawnRandomLootAt(hp.cx + (isRot ? 3.5 : -3.5), 0.5, hp.cz + (Math.random() - 0.5) * 3);
+    }
+    // 40% chance for 2nd floor item
+    if (Math.random() < 0.40) {
+      spawnRandomLootAt(hp.cx + (isRot ? 3.0 : -3.0), 6.45, hp.cz + (isRot ? -4.5 : 4.5));
+    }
+    // Rare 15% chance for high tier item
+    if (Math.random() < 0.15) {
+      const cat = Math.random() < 0.5 ? 'armor' : 'gear';
+      spawnRandomLootAt(hp.cx + (isRot ? 4.5 : -4.5), 6.45, hp.cz + (isRot ? 5.5 : -5.5), cat);
     }
   });
 
-  // 15. GUARANTEED PUBG UAZ 4X4 JEEPS (1 CAR ALWAYS PARKED AT TERMINAL DROP OF EACH TEAM'S FLIGHT!)
-  // Blue Team LZ (-35, -120): Blue plane's terminal drop! ALWAYS 1 CAR WAITING HERE!
-  const jeepBlue = createPubgJeepVehicle(-35, -120, 0);
-  // Red Team LZ (30, 820): Red plane's terminal drop! ALWAYS 1 CAR WAITING HERE!
-  const jeepRed = createPubgJeepVehicle(30, 820, Math.PI);
+  // B. Major Landmarks & Compounds Loot Spots (School, Apartments, Church, Warehouses, Towers)
+  const landmarkLootSpots = [
+    // PUBG SCHOOL & POOL
+    { x: 350, y: 0.5, z: 410, cat: 'weapon' }, { x: 340, y: 0.5, z: 425, cat: 'armor' },
+    { x: 360, y: 0.5, z: 425, cat: 'med' }, { x: 340, y: 6.4, z: 415, cat: 'grenade' },
+    { x: 360, y: 6.4, z: 415, cat: 'gear' }, { x: 350, y: 11.2, z: 420, cat: 'weapon' },
+    { x: 338, y: 11.2, z: 430, cat: 'gear' }, { x: 362, y: 11.2, z: 410, cat: 'med' },
+    { x: 307, y: 0.5, z: 420, cat: 'weapon' }, { x: 298, y: 4.2, z: 420, cat: 'grenade' },
+    { x: 325, y: 0.5, z: 440, cat: 'armor' }, { x: 375, y: 0.5, z: 440, cat: 'gear' },
 
-  // Extra vehicles across towns
-  const jeepSchool = createPubgJeepVehicle(350, 465, 0); // School Courtyard
-  const jeepRozhok = createPubgJeepVehicle(60, 750, 0);  // Rozhok Hill
-  const jeepPochinki = createPubgJeepVehicle(-150, 0, -1.2); // Pochinki Center
-  const jeepFarm = createPubgJeepVehicle(140, -520, 0);   // Farm
-  const jeepYasnaya = createPubgJeepVehicle(250, 790, 1.5); // Yasnaya
-  const jeepCoast = createPubgJeepVehicle(-160, -700, 0.5); // Coast
+    // SCHOOL APARTMENTS
+    { x: 460, y: 0.5, z: 390, cat: 'weapon' }, { x: 460, y: 9.2, z: 390, cat: 'med' }, { x: 460, y: 13.8, z: 390, cat: 'weapon' },
+    { x: 460, y: 0.5, z: 450, cat: 'armor' }, { x: 460, y: 9.2, z: 450, cat: 'gear' }, { x: 460, y: 13.8, z: 450, cat: 'gear' },
+    { x: 510, y: 0.5, z: 420, cat: 'armor' }, { x: 510, y: 9.2, z: 420, cat: 'med' }, { x: 510, y: 13.8, z: 420, cat: 'gear' },
 
-  mapGroup.add(
-    jeepBlue.group, jeepRed.group, jeepSchool.group, jeepRozhok.group,
-    jeepPochinki.group, jeepFarm.group, jeepYasnaya.group, jeepCoast.group
-  );
-  const vehicles = [
-    jeepBlue, jeepRed, jeepSchool, jeepRozhok,
-    jeepPochinki, jeepFarm, jeepYasnaya, jeepCoast
+    // POCHINKI CHURCH
+    { x: -340, y: 0.5, z: -10, cat: 'weapon' }, { x: -340, y: 0.5, z: 5, cat: 'armor' },
+    { x: -348, y: 14.5, z: 6, cat: 'weapon' }, { x: -348, y: 28.0, z: 16.5, cat: 'gear' },
+
+    // YASNAYA APARTMENTS & CLOCK TOWER
+    { x: 380, y: 0.5, z: 740, cat: 'weapon' }, { x: 380, y: 13.8, z: 740, cat: 'weapon' },
+    { x: 380, y: 0.5, z: 840, cat: 'armor' }, { x: 380, y: 13.8, z: 840, cat: 'gear' },
+    { x: 300, y: 0.5, z: 800, cat: 'armor' }, { x: 300, y: 32.0, z: 800, cat: 'gear' },
+
+    // RED BARNS (FARM)
+    { x: 120, y: 0.5, z: -470, cat: 'weapon' }, { x: 125, y: 0.5, z: -465, cat: 'armor' },
+    { x: 180, y: 0.5, z: -470, cat: 'gear' }, { x: 175, y: 0.5, z: -465, cat: 'med' },
+
+    // MILITARY WAREHOUSES
+    { x: 0, y: 0.5, z: -900, cat: 'weapon' }, { x: 5, y: 0.5, z: -900, cat: 'gear' },
+    { x: -70, y: 0.5, z: -860, cat: 'gear' }, { x: -65, y: 0.5, z: -860, cat: 'weapon' },
+    { x: -10, y: 0.5, z: -890, cat: 'armor' }, { x: -75, y: 0.5, z: -850, cat: 'grenade' },
+
+    // WATCHTOWERS
+    { x: -120, y: 15.5, z: -550, cat: 'weapon' },
+    { x: 140, y: 15.5, z: -320, cat: 'gear' },
+    { x: -130, y: 15.5, z: 120, cat: 'weapon' },
+    { x: 90, y: 15.5, z: 520, cat: 'gear' },
+    { x: 260, y: 15.5, z: 950, cat: 'weapon' },
+
+    // COAST & LIGHTHOUSE
+    { x: -280, y: 0.5, z: -800, cat: 'weapon' }, { x: -280, y: 22.0, z: -800, cat: 'gear' },
+    { x: -120, y: 0.5, z: -750, cat: 'grenade' }, { x: -160, y: 0.5, z: -750, cat: 'med' }
   ];
+
+  landmarkLootSpots.forEach(s => {
+    spawnRandomLootAt(s.x, s.y, s.z, s.cat);
+  });
+
+  // 15. CURATED & BALANCED PUBG VEHICLE FLEET (Strictly limited to 4 well-spaced vehicles)
+  const candidateVehicles = [
+    { x: -35, z: -120, rot: 0 },              // Blue LZ (South Pochinki)
+    { x: 30, z: 820, rot: Math.PI },          // Red LZ (Rozhok Hill)
+    { x: 350, z: 465, rot: 0.4 },             // School Courtyard
+    { x: 140, z: -520, rot: 0.8 },            // Farm Highway
+    { x: 250, z: 790, rot: 1.5 },             // Yasnaya Boulevard
+    { x: -160, z: -700, rot: 0.5 },           // Mylta Coastal Road
+    { x: -220, z: -75, rot: 0 },              // Pochinki West Garage
+    { x: 0, z: 300, rot: 0 }                  // Central Crossroad Junction
+  ];
+
+  // Shuffle locations
+  for (let i = candidateVehicles.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [candidateVehicles[i], candidateVehicles[j]] = [candidateVehicles[j], candidateVehicles[i]];
+  }
+
+  // Exactly 4 vehicles total on the entire map, well separated (minimum 300m apart)
+  const selectedSpots = [
+    { x: -35, z: -120, rot: 0 },
+    { x: 30, z: 820, rot: Math.PI }
+  ];
+  const maxTotalVehicles = 4;
+  for (let i = 0; i < candidateVehicles.length && selectedSpots.length < maxTotalVehicles; i++) {
+    const sp = candidateVehicles[i];
+    const tooClose = selectedSpots.some(s => Math.hypot(sp.x - s.x, sp.z - s.z) < 300);
+    if (!tooClose) {
+      selectedSpots.push(sp);
+    }
+  }
+
+  const vehicles = [];
+  selectedSpots.forEach((spot, idx) => {
+    const vRoll = Math.random();
+    const rot = spot.rot + (Math.random() - 0.5) * 0.3;
+    let vObj;
+    if (idx === 0) {
+      // Iconic Beyaz Toros at Blue LZ
+      vObj = createPubgTorosVehicle(spot.x, spot.z, rot);
+    } else if (idx === 1) {
+      // Military Motorbike at Red LZ
+      vObj = createPubgMotorbikeVehicle(spot.x, spot.z, rot);
+    } else if (vRoll < 0.40) {
+      vObj = createPubgTorosVehicle(spot.x, spot.z, rot);
+    } else if (vRoll < 0.72) {
+      vObj = createPubgJeepVehicle(spot.x, spot.z, rot);
+    } else {
+      vObj = createPubgMotorbikeVehicle(spot.x, spot.z, rot);
+    }
+    mapGroup.add(vObj.group);
+    vehicles.push(vObj);
+  });
 
   // 16. BALANCED SPAWN & DROP POINTS FOR TEAMS & FFA
   spawnPoints.push(
@@ -4441,6 +5348,7 @@ window.models = {
   createButterflyKnifeModel: (isVm, skin) => createButterflyKnifeModel(isVm, skin),
   createHuntsmanKnifeModel: (isVm, skin) => createHuntsmanKnifeModel(isVm, skin),
   createFragGrenadeModel: (isVm, skin) => createFragGrenadeModel(isVm, skin),
+  createSmokeGrenadeModel: (isVm, skin) => createSmokeGrenadeModel(isVm, skin),
   createPaintballGunModel: (isVm, skin) => createPaintballGunModel(isVm, skin),
   createMinigunModel: (isVm, skin) => createMinigunModel(isVm, skin),
   createSniperModel: (isVm, skin) => createSniperModel(isVm, skin),
@@ -4456,6 +5364,8 @@ window.models = {
   createCyberCityMap: () => createCyberCityMap(),
   createLobbyEnvironment: () => createLobbyEnvironment(),
   createPubgJeepVehicle: (x, z, angle) => createPubgJeepVehicle(x, z, angle),
+  createPubgTorosVehicle: (x, z, angle) => createPubgTorosVehicle(x, z, angle),
+  createPubgMotorbikeVehicle: (x, z, angle) => createPubgMotorbikeVehicle(x, z, angle),
   createPubgSurvivalMap: () => createPubgSurvivalMap()
 };
 
