@@ -252,6 +252,22 @@
         <div style="font-size: 12px; color: #94a3b8;">Arkadaşlarının kurduğu özel odaya katılın:</div>
         <input type="text" id="private-room-code-input" class="private-input-box" placeholder="Oda ID (Örn: CC7F7LX8)" maxlength="12">
         <button class="btn-join-private-game" onclick="joinPrivateRoom()">GİRİŞ YAP</button>
+
+        <!-- CANLI AKTİF ODALAR LİSTESİ -->
+        <div style="margin-top: 14px; border-top: 1px solid rgba(255,255,255,0.12); padding-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div style="font-size: 13px; font-weight: 800; color: #38bdf8; display: flex; align-items: center; gap: 6px;">
+              <span>🟢</span> AKTİF ODALAR <span id="active-rooms-count" style="font-size: 11px; background: rgba(56,189,248,0.2); border: 1px solid #38bdf8; border-radius: 6px; padding: 1px 6px; color: #7dd3fc; font-weight: 800;">0</span>
+            </div>
+            <button onclick="loadActiveRoomsList()" style="background: rgba(15,23,42,0.85); border: 1px solid #38bdf8; color: #38bdf8; border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 800; cursor: pointer; transition: all 0.15s;" title="Odaları Yenile">🔄 Yenile</button>
+          </div>
+          
+          <div id="active-rooms-list" style="max-height: 165px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; scrollbar-width: thin;">
+            <div style="padding: 14px 6px; text-align: center; color: #64748b; font-size: 12px; font-weight: 600;">
+              Şu an açık oda yok.<br>Sağ taraftan yeni oda başlatabilirsiniz!
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Right Create Card -->

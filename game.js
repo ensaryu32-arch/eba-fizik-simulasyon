@@ -2802,6 +2802,7 @@ window.openPrivateGameModal = function() {
   window.soundFX.playClick();
   closeModeModal();
   document.getElementById('private-game-modal').style.display = 'flex';
+  if (typeof loadActiveRoomsList === 'function') loadActiveRoomsList();
 };
 
 window.closePrivateGameModal = function() {
@@ -2880,6 +2881,68 @@ window.joinPrivateRoom = async function() {
   } catch (e) {
     alert('Sunucuya bağlanılamadı!');
   }
+};
+
+window.loadActiveRoomsList = async function() {
+  const container = document.getElementById('active-rooms-list');
+  const countBadge = document.getElementById('active-rooms-count');
+  if (!container) return;
+
+  container.innerHTML = '<div style="padding: 14px 6px; text-align: center; color: #94a3b8; font-size: 11px;">Odalar taranıyor...</div>';
+
+  try {
+    const res = await fetch('/api/rooms/active');
+    const data = await res.json();
+    if (!data || !data.success || !Array.isArray(data.rooms)) {
+      container.innerHTML = '<div style="padding: 14px 6px; text-align: center; color: #ef4444; font-size: 11px;">Odalar yüklenemedi.</div>';
+      return;
+    }
+
+    const rooms = data.rooms;
+    if (countBadge) countBadge.textContent = rooms.length;
+
+    if (rooms.length === 0) {
+      container.innerHTML = `
+        <div style="padding: 14px 6px; text-align: center; color: #64748b; font-size: 12px; font-weight: 600;">
+          Şu an açık oda yok.<br>Sağ taraftan yeni oda başlatabilirsiniz!
+        </div>
+      `;
+      return;
+    }
+
+    let html = '';
+    rooms.forEach(r => {
+      const mapName = (r.map === 'pubg') ? 'PUBG' : (r.map === 'cyber_city' ? 'Cyber City' : 'Arena');
+      const isFull = (r.playerCount >= r.maxPlayers);
+      html += `
+        <div style="background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 9px; padding: 7px 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <div style="display: flex; flex-direction: column; gap: 2px; overflow: hidden;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span style="font-weight: 900; color: #facc15; font-size: 12px; letter-spacing: 0.5px;">${r.roomId}</span>
+              <span style="font-size: 10px; background: rgba(14, 165, 233, 0.2); color: #38bdf8; border: 1px solid rgba(14, 165, 233, 0.4); border-radius: 4px; padding: 1px 5px; font-weight: 800;">${mapName}</span>
+            </div>
+            <div style="font-size: 11px; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+              ${r.mode} • 👥 <b style="color: #fff;">${r.playerCount}/${r.maxPlayers}</b> Oyuncu
+            </div>
+          </div>
+          <button onclick="joinRoomDirectly('${r.roomId}')" ${isFull ? 'disabled' : ''} style="background: ${isFull ? '#334155' : 'linear-gradient(135deg, #10b981, #059669)'}; border: 1px solid ${isFull ? '#475569' : '#34d399'}; color: #fff; font-weight: 900; font-size: 11px; padding: 6px 12px; border-radius: 7px; cursor: ${isFull ? 'not-allowed' : 'pointer'}; box-shadow: ${isFull ? 'none' : '0 0 10px rgba(16,185,129,0.35)'}; flex-shrink: 0;">
+            ${isFull ? 'DOLU' : 'GİR'}
+          </button>
+        </div>
+      `;
+    });
+    container.innerHTML = html;
+  } catch (err) {
+    container.innerHTML = '<div style="padding: 14px 6px; text-align: center; color: #ef4444; font-size: 11px;">Bağlantı hatası!</div>';
+  }
+};
+
+window.joinRoomDirectly = async function(roomId) {
+  const code = (roomId || '').trim().toUpperCase();
+  if (!code) return;
+  const inputEl = document.getElementById('private-room-code-input');
+  if (inputEl) inputEl.value = code;
+  await window.joinPrivateRoom();
 };
 
 function openScoreboard() {
@@ -8569,7 +8632,6 @@ function inviteFriendToRoom(targetUsername) {
 
   showFriendActionMsg(`📩 "${targetUsername}" adlı oyuncuya davet gönderiliyor...`, true);
 }
-window.inviteFriendToRoom = inviteFriendToRoom;
 window.inviteFriendToRoom = inviteFriendToRoom;
 
 // Global initialization on DOM ready (with fallback if DOM is already ready)

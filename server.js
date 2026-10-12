@@ -1009,6 +1009,36 @@ app.post('/api/rooms/create', (req, res) => {
   });
 });
 
+// 12. GET ALL ACTIVE & OPEN ROOMS
+app.get('/api/rooms/active', (req, res) => {
+  const activeRoomsList = [];
+  rooms.forEach((r, id) => {
+    const pCount = r.players ? r.players.size : 0;
+    // Show custom/private rooms or any public room that has players in it
+    if (r.isPrivate || pCount > 0) {
+      activeRoomsList.push({
+        roomId: r.id || id,
+        name: r.name || `Özel Oda (${id})`,
+        mode: r.mode || 'FFA',
+        map: r.map || 'pubg',
+        duration: r.duration || 900,
+        bots: r.bots || 'none',
+        isPrivate: !!r.isPrivate,
+        playerCount: pCount,
+        maxPlayers: r.maxPlayers || 16
+      });
+    }
+  });
+
+  // Sort rooms with players first
+  activeRoomsList.sort((a, b) => b.playerCount - a.playerCount);
+
+  return res.json({
+    success: true,
+    rooms: activeRoomsList
+  });
+});
+
 // Universal static router: seamlessly serves assets whether in public/js/ or flat root (GitHub structure)
 app.use((req, res, next) => {
   if (req.path.endsWith('.js') || req.path.endsWith('.css')) {
